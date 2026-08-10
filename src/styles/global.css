@@ -1,7 +1,18 @@
 :root {
-  font-family: system-ui, sans-serif;
-  color: #213547;
-  background-color: #ffffff;
+  --color-ink: #1b1f2a;
+  --color-muted: #6b7280;
+  --color-background: #f4f5f9;
+  --color-surface: #fff;
+  --color-primary: #8454f6;
+  --color-primary-dark: #7042df;
+  --color-primary-soft: #f1edff;
+  --color-accent: #ff9351;
+  --color-border: #e6e8f0;
+  --color-danger: #e5484d;
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', Pretendard,
+    'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  color: var(--color-ink);
+  background: var(--color-background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -18,15 +29,20 @@ body {
   margin: 0;
 }
 
-.app-layout {
-  min-height: 100vh;
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
-.app-header,
-.app-main {
-  padding: 1rem;
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
 }
 
-h1 {
-  margin: 0;
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgb(76 95 213 / 25%);
+  outline-offset: 2px;
 }
