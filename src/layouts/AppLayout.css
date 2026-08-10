@@ -1,0 +1,26 @@
+.app-shell {
+  width: min(1180px, calc(100% - 48px));
+  min-height: 604px;
+  margin: 24px auto;
+  overflow: hidden;
+  background: var(--color-surface);
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+.app-content {
+  padding: 34px 34px 20px;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .app-content {
+    padding: 24px 20px 32px;
+  }
+}
