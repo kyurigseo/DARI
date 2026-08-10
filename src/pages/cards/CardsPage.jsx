@@ -1,4 +1,4 @@
-import PagePlaceholder from '../components/common/PagePlaceholder'
+import PagePlaceholder from '../../components/common/PagePlaceholder'
 
 function CardsPage() {
   return <PagePlaceholder title="Cards" />

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import dariLogo from '../../assets/logo/dari_logo.svg'
+import dariLogo from '../../assets/img/logo/dari_logo.svg'
 import './Sidebar.css'
 
 const navigationItems = [
