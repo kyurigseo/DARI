@@ -1,0 +1,366 @@
+.rehearsal-page {
+  color: var(--color-ink);
+}
+
+.rehearsal-page__heading {
+  margin-bottom: 20px;
+}
+
+.rehearsal-page__heading h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.rehearsal-page__heading p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.persona-list {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.persona-button {
+  min-height: 36px;
+  padding: 7px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #242936;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.persona-button:hover {
+  border-color: #b9a2fa;
+}
+
+.persona-button--active {
+  color: var(--color-primary);
+  background: #faf8ff;
+  border-color: var(--color-primary);
+}
+
+.persona-button__flag {
+  width: 18px;
+  height: 12px;
+  display: block;
+  object-fit: cover;
+  border: 1px solid rgb(27 31 42 / 10%);
+  border-radius: 2px;
+}
+
+.rehearsal-chat {
+  min-height: 518px;
+  padding: 24px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.rehearsal-chat__log {
+  min-height: 270px;
+  max-height: 430px;
+  padding: 0 2px 8px;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chat-message {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.chat-message--user {
+  justify-content: flex-end;
+}
+
+.chat-avatar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.chat-avatar--ai {
+  background: #f3f4f8;
+}
+
+.chat-avatar--ai img {
+  width: 20px;
+  height: 14px;
+  display: block;
+  object-fit: cover;
+  border: 1px solid rgb(27 31 42 / 10%);
+  border-radius: 2px;
+}
+
+.chat-avatar--user {
+  color: #fff;
+  background: var(--color-primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.chat-message__bubble {
+  max-width: 74%;
+  margin: 0;
+  padding: 11px 14px;
+  color: #303542;
+  background: #f3f4f8;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-message--ai .chat-message__bubble {
+  border-top-left-radius: 4px;
+}
+
+.chat-message--user .chat-message__bubble {
+  color: #fff;
+  background: var(--color-primary);
+  border-top-right-radius: 4px;
+}
+
+.coach-feedback {
+  margin: 2px 126px 12px 0;
+  padding: 14px 15px;
+  color: #7e461e;
+  background: #fff0e4;
+  border-radius: 14px;
+}
+
+.coach-feedback h2 {
+  margin: 0 0 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.coach-feedback__situation,
+.coach-feedback__tip,
+.coach-feedback__recommendation,
+.coach-feedback__translation {
+  margin: 0;
+}
+
+.coach-feedback__situation {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.coach-feedback__tip {
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.coach-feedback__recommendation {
+  margin-bottom: 7px;
+  padding: 10px 11px;
+  color: #262b36;
+  background: #fff;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coach-feedback__recommendation img {
+  width: 18px;
+  height: 12px;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border: 1px solid rgb(27 31 42 / 10%);
+  border-radius: 2px;
+}
+
+.coach-feedback__translation {
+  margin-bottom: 10px;
+  font-size: 11.5px;
+}
+
+.coach-feedback__save {
+  padding: 8px 12px;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border: 0;
+  border-radius: 9px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coach-feedback__save--saved {
+  color: #fff;
+  background: #20ad7a;
+  cursor: default;
+}
+
+.answer-examples {
+  margin: 6px 0 10px;
+}
+
+.answer-examples > p {
+  margin: 0 0 7px;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.answer-examples__list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.answer-examples__list button {
+  padding: 7px 12px;
+  color: #444a57;
+  background: #f5f6fa;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.answer-examples__list button:hover {
+  color: var(--color-primary);
+  border-color: #b9a2fa;
+}
+
+.rehearsal-composer {
+  min-height: 48px;
+  padding: 5px 6px 5px 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.rehearsal-composer:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgb(132 84 246 / 12%);
+}
+
+.rehearsal-composer textarea {
+  min-width: 0;
+  min-height: 36px;
+  max-height: 96px;
+  padding: 8px 0;
+  flex: 1;
+  resize: vertical;
+  color: var(--color-ink);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rehearsal-composer textarea::placeholder {
+  color: #9297a3;
+}
+
+.rehearsal-composer button {
+  min-width: 56px;
+  height: 36px;
+  padding: 0 14px;
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rehearsal-composer button:hover {
+  background: var(--color-primary-dark);
+}
+
+.rehearsal-toast {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  z-index: 40;
+  padding: 12px 20px;
+  color: #fff;
+  background: #1b1f2a;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 14px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.rehearsal-toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 768px) {
+  .rehearsal-chat {
+    min-height: 560px;
+    padding: 18px 14px 14px;
+  }
+
+  .rehearsal-chat__log {
+    min-height: 310px;
+  }
+
+  .coach-feedback {
+    margin-right: 0;
+  }
+
+  .chat-message__bubble {
+    max-width: calc(100% - 42px);
+  }
+}
+
+@media (max-width: 480px) {
+  .persona-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .persona-button {
+    justify-content: center;
+  }
+
+  .answer-examples__list {
+    display: grid;
+  }
+
+  .answer-examples__list button {
+    text-align: left;
+  }
+}
