@@ -1,0 +1,360 @@
+.mypage {
+  color: var(--color-ink);
+}
+
+.mypage__heading {
+  margin-bottom: 20px;
+}
+
+.mypage__heading h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.mypage__heading p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 프로필 카드 */
+.profile-card {
+  padding: 18px 22px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.profile-card__avatar {
+  width: 57px;
+  height: 57px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: 800;
+  background-color: #FF9351;
+}
+
+.profile-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-card__name {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.profile-card__meta {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-card__edit {
+  padding: 8px 16px;
+  flex: 0 0 auto;
+  color: var(--color-ink);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-card__edit:hover {
+  color: var(--color-primary);
+  border-color: #b9a2fa;
+}
+
+/* 통계 카드 */
+.stats-row {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+}
+
+.stat-card {
+  flex: 1;
+  padding: 20px 12px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.stat-card__value {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.stat-card__label {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+/* 설정 카드 */
+.settings-card {
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.settings-card__title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.settings-row {
+  padding: 13px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-card__title + .settings-row {
+  border-top: 0;
+}
+
+.settings-row__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-ink);
+  font-size: 13.5px;
+}
+
+.lang-pill {
+  padding: 4px 12px;
+  color: #8454f6;
+  background: #f1ecfc;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 토글 스위치 */
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  padding: 2px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  background: #d9dbe1;
+  border: 0;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.toggle-switch--on {
+  background: var(--color-primary);
+}
+
+.toggle-switch__thumb {
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch--on .toggle-switch__thumb {
+  transform: translateX(18px);
+}
+
+/* 로그아웃 버튼 */
+.logout-button {
+  padding: 10px 20px;
+  color: var(--color-ink);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+/* -------------- 내 정보 수정 모달 -------------- */
+.mypage-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.mypage-modal {
+  width: 420px;
+  height: 437px;
+  padding: 24px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.mypage-modal__title {
+  margin: 0 0 18px;
+  color: #111;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mypage-modal__avatar-row {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mypage-modal__avatar {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.photo-change-button {
+  padding: 9px 16px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.photo-change-button:hover {
+  background: #f4f5f8;
+}
+
+.mypage-modal__field {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mypage-modal__field-label {
+  color: #555;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mypage-modal__field input {
+  padding: 10px 14px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.mypage-modal__field input:focus {
+  outline: 0;
+  border-color: #8454f6;
+}
+
+.mypage-modal__save {
+  padding: 13px 0;
+  margin-top: auto;
+  color: #fff;
+  background: #8454f6;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mypage-modal__save:hover:not(:disabled) {
+  background: #6a3de8;
+}
+
+.mypage-modal__save:disabled {
+  background: #c9bafa;
+  cursor: not-allowed;
+}
+
+/* -------------- 토스트 -------------- */
+.mypage-toast {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  z-index: 60;
+  padding: 12px 20px;
+  color: #fff;
+  background: #1b1f2a;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 14px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.mypage-toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 640px) {
+  .profile-card,
+  .settings-card {
+    padding: 16px 18px;
+  }
+
+  .stats-row {
+    flex-wrap: wrap;
+  }
+
+  .mypage-modal {
+    width: 100%;
+    height: auto;
+    min-height: 400px;
+  }
+}
