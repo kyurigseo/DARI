@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "rest_framework.simplejwt",
+    "rest_framework_simplejwt",
     "accounts",
     "home",
     "rehearsal",
