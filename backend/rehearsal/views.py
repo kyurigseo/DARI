@@ -68,7 +68,9 @@ class SessionMessageView(APIView):
             session=session, user_message=user_message, original_text=user_text, **feedback_data
         )
 
-        ai_reply = ai_engine.generate_ai_reply(session.persona, user_text)
+        ai_reply = ai_engine.generate_ai_reply(
+            session.persona, user_text, history=session.messages.exclude(id=user_message.id)
+        )
         ai_message = RehearsalMessage.objects.create(
             session=session, role=RehearsalMessage.Role.AI, content=ai_reply
         )

@@ -44,6 +44,7 @@ static_root/
 # 환경변수 / 시크릿 (.env, INTERNAL_SERVICE_TOKEN, SECRET_KEY 등)
 .env
 .env.*
+.env.example
 !.env.example
 *.pem
 *.key
