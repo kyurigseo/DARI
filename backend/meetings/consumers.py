@@ -1,7 +1,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import MeetingSession, MeetingParticipant, MeetingTranscript
+from .models import MeetingSession, MeetingParticipant, MeetingTranscript, MeetingChatMessage
 from .services import AIServicePipeline
 
 class MeetingConsumer(AsyncWebsocketConsumer):
@@ -43,12 +43,9 @@ class MeetingConsumer(AsyncWebsocketConsumer):
         )
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
-
     async def receive_bytes(self, bytes_data):
-        """프론트엔드에서 전송한 오디오 바이너리 조각(Audio Chunk) 수신"""
         self.audio_buffer.extend(bytes_data)
 
-        # 적절한 버퍼 크기 축적 시 STT/번역 실행
         if len(self.audio_buffer) >= 64 * 1024:
             chunk_to_process = bytes(self.audio_buffer)
             self.audio_buffer.clear()
@@ -56,7 +53,6 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             original_text = await AIServicePipeline.process_stt(chunk_to_process)
 
             if original_text:
-                # 실시간 번역 진행
                 target_langs = ['KO', 'EN-US', 'JA', 'ZH', 'DE']
                 translations = await AIServicePipeline.process_translation(original_text, target_langs)
 
@@ -72,7 +68,6 @@ class MeetingConsumer(AsyncWebsocketConsumer):
                         'translations': translations
                     }
                 )
-
 
     async def receive(self, text_data):
         data = json.loads(text_data)
@@ -108,9 +103,35 @@ class MeetingConsumer(AsyncWebsocketConsumer):
                 }
             )
 
+        elif event_type == 'chat_message':
+            message = data.get('message')
+            is_speech_card = data.get('is_speech_card', False)
+
+            if message:
+                await self.save_chat_message(message, is_speech_card)
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_broadcast',
+                        'sender_id': self.user.id,
+                        'sender_name': self.user.username,
+                        'message': message,
+                        'is_speech_card': is_speech_card,
+                    }
+                )
+
+
+    async def chat_broadcast(self, event):
+        """실시간 채팅 브로드캐스트"""
+        await self.send(text_data=json.dumps({
+            'type': 'chat',
+            'sender_id': event['sender_id'],
+            'sender_name': event['sender_name'],
+            'message': event['message'],
+            'is_speech_card': event['is_speech_card'],
+        }))
 
     async def subtitle_broadcast(self, event):
-        """회의실 내 전원에게 원문 및 번역 자막 전송"""
         await self.send(text_data=json.dumps({
             'type': 'subtitle',
             'speaker_id': event['speaker_id'],
@@ -132,6 +153,17 @@ class MeetingConsumer(AsyncWebsocketConsumer):
     async def status_changed(self, event):
         await self.send(text_data=json.dumps(event))
 
+
+    @database_sync_to_async
+    def save_chat_message(self, message, is_speech_card):
+        meeting = MeetingSession.objects.filter(room_code=self.room_code).first()
+        if meeting:
+            MeetingChatMessage.objects.create(
+                meeting=meeting,
+                sender=self.user,
+                message=message,
+                is_speech_card=is_speech_card
+            )
 
     @database_sync_to_async
     def save_transcript(self, original_text, translations):

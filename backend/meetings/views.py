@@ -1,19 +1,20 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
-
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from .models import MeetingSession, MeetingParticipant
-from .serializers import MeetingSessionSerializer, ParticipantSerializer
+from django.contrib.auth import get_user_model
+from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage
+from .serializers import MeetingSessionSerializer, ParticipantSerializer, SpeechCardSerializer, MeetingChatMessageSerializer
 from .utils import generate_media_server_token
+
+User = get_user_model()
 
 class CreateMeetingView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """회의실 생성 API"""
         title = request.data.get('title', '신규 회의')
         room_code = request.data.get('room_code')
 
@@ -32,7 +33,6 @@ class PrejoinView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, room_code):
-        """대기실 정보 조회 및 유효성 검증 API"""
         meeting = get_object_or_404(MeetingSession, room_code=room_code)
 
         if meeting.status == 'ENDED':
@@ -53,7 +53,6 @@ class MediaTokenView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, room_code):
-        """미디어 서버/시그널링 접속용 토큰 발급 API"""
         meeting = get_object_or_404(MeetingSession, room_code=room_code)
         token = generate_media_server_token(
             room_code=meeting.room_code,
@@ -61,3 +60,61 @@ class MediaTokenView(APIView):
             username=request.user.username
         )
         return Response({'token': token})
+
+
+class SpeechCardListView(APIView):
+    """발언카드 조회 API: 로그인 사용자가 사전에 생성한 발언카드 목록 반환"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        cards = SpeechCard.objects.filter(user=request.user)
+        serializer = SpeechCardSerializer(cards, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ParticipantManageView(APIView):
+    """참가자 관리 API: 목록 조회 및 사용자 초대"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        participants = meeting.participants.filter(is_active=True)
+        return Response(ParticipantSerializer(participants, many=True).data)
+
+    def post(self, request, room_code):
+        """사용자 초대 API"""
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        username = request.data.get('username')
+
+        invited_user = User.objects.filter(username=username).first()
+        if not invited_user:
+            return Response({'error': '존재하지 않는 사용자입니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        participant, created = MeetingParticipant.objects.get_or_create(
+            meeting=meeting,
+            user=invited_user,
+            defaults={'is_host': False}
+        )
+        return Response({'message': f'{username} 님을 회의에 초대했습니다.'}, status=status.HTTP_200_OK)
+
+
+class KickParticipantView(APIView):
+    """호스트 권한 참가자 내보내기 API"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+        # 호스트 권한 체크
+        if meeting.host != request.user:
+            return Response({'error': '참가자를 내보낼 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        target_user_id = request.data.get('user_id')
+        participant = MeetingParticipant.objects.filter(meeting=meeting, user_id=target_user_id).first()
+
+        if participant:
+            participant.is_active = False
+            participant.save()
+            return Response({'message': '참가자를 회의에서 내보냈습니다.'}, status=status.HTTP_200_OK)
+
+        return Response({'error': '해당 참가자를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
