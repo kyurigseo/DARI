@@ -158,6 +158,9 @@ CHANNEL_LAYERS = {
     },
 }
 MEDIA_SERVER_SECRET = 'your-media-server-secret-key-1234'
+# meetings -> tracker 서버 간 호출(ingest 엔드포인트) 인증용 공유 시크릿.
+# meetings 담당자와 값 공유 후 운영 환경에서는 환경변수로 교체할 것.
+INTERNAL_SERVICE_TOKEN = os.environ.get('INTERNAL_SERVICE_TOKEN', 'dev-internal-token-change-me')
 DEFAULT_FROM_EMAIL = 'noreply@dari.com'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

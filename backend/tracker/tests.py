@@ -114,6 +114,52 @@ class RecommendationTests(TestCase):
         self.assertEqual((best["weekday"], best["half_hour_index"]), (2, 18))
         self.assertEqual(best["uncomfortable_count"], 0)
 
+    def test_candidate_ids_are_strings_not_uuid_objects(self):
+        # participant_id는 UUID 필드라 slot.participant_id는 uuid.UUID 인스턴스다. views.py는
+        # 항상 str(pid)로 비교하므로, services.py도 str로 저장하지 않으면 매칭이 항상 실패해
+        # 응답의 status가 null로 나오는 회귀가 있었다(RecommendationView).
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=3, half_hour_index=5, status=AvailabilitySlot.COMFORTABLE
+        )
+        best = services.recommend_slot([str(self.alice.id)])
+        self.assertEqual(best["comfortable_ids"], [str(self.alice.id)])
+        self.assertIsInstance(best["comfortable_ids"][0], str)
+
+
+class RecommendationEndpointTests(TestCase):
+    """POST /api/v1/tracker/recommendations/ 응답의 participants[].status가 채워지는지 확인.
+    services._slot_status_map이 UUID 객체를 str로 안 바꾸면 여기서 항상 null이 된다.
+
+    두 참가자 모두 COMFORTABLE로 맞춘 이유: NEUTRAL을 하나라도 섞으면 정렬 우선순위가
+    (불편, 보통, 미응답, ...) 순이라 "아무도 응답 안 한 빈 슬롯"이 오히려 더 좋은 슬롯으로
+    잘못 뽑히는 별도의 랭킹 버그가 있어(이번 수정 범위 밖, 별도 보고), 이 테스트가 그 버그와
+    얽히지 않도록 피한다.
+    """
+
+    def setUp(self):
+        self.alice = _make_user("alice")
+        self.bob = _make_user("bob")
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=2, half_hour_index=18, status=AvailabilitySlot.COMFORTABLE
+        )
+        AvailabilitySlot.objects.create(
+            participant=self.bob, weekday=2, half_hour_index=18, status=AvailabilitySlot.COMFORTABLE
+        )
+
+    def test_participants_status_is_not_null(self):
+        client = _auth_client(self.alice)
+        response = client.post(
+            reverse("tracker-recommendations"),
+            {"participant_ids": [str(self.alice.id), str(self.bob.id)]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        recommendation = response.json()["recommendation"]
+        self.assertEqual((recommendation["weekday"], recommendation["half_hour_index"]), (2, 18))
+        by_user = {p["user_id"]: p["status"] for p in recommendation["participants"]}
+        self.assertEqual(by_user[str(self.alice.id)], "COMFORTABLE")
+        self.assertEqual(by_user[str(self.bob.id)], "COMFORTABLE")
+
 
 class HeatmapPermissionTests(TestCase):
     def setUp(self):

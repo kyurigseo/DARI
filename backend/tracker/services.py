@@ -132,7 +132,7 @@ def _slot_status_map(participant_ids):
     by_slot = {}
     for slot in slots:
         key = (slot.weekday, slot.half_hour_index)
-        by_slot.setdefault(key, {}).setdefault(slot.status, []).append(slot.participant_id)
+        by_slot.setdefault(key, {}).setdefault(slot.status, []).append(str(slot.participant_id))
     return by_slot
 
 
