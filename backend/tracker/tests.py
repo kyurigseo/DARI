@@ -114,6 +114,60 @@ class RecommendationTests(TestCase):
         self.assertEqual((best["weekday"], best["half_hour_index"]), (2, 18))
         self.assertEqual(best["uncomfortable_count"], 0)
 
+    def test_answered_neutral_slot_beats_completely_blank_slot(self):
+        # 불편0/보통1/미응답0 슬롯(실제로 누군가 응답함)이, 아무도 응답 안 한 완전히 빈 슬롯
+        # (불편0/보통0/미응답2)보다 먼저 추천돼야 한다. 정렬 키에서 missing_count를
+        # neutral_count보다 먼저 비교하지 않으면, 빈 슬롯은 neutral_count가 항상 0이라
+        # 실제 응답이 있는 이 슬롯보다 부당하게 앞서는 회귀가 있었다.
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=4, half_hour_index=8, status=AvailabilitySlot.NEUTRAL
+        )
+        AvailabilitySlot.objects.create(
+            participant=self.bob, weekday=4, half_hour_index=8, status=AvailabilitySlot.COMFORTABLE
+        )
+        best = services.recommend_slot([str(self.alice.id), str(self.bob.id)])
+        self.assertEqual((best["weekday"], best["half_hour_index"]), (4, 8))
+        self.assertEqual(best["missing_count"], 0)
+        self.assertEqual(best["neutral_count"], 1)
+
+    def test_full_priority_order_unc_missing_neutral_time(self):
+        # 불편 > 미응답 > 보통 > (요일,시간) 우선순위 전체가 올바른지 슬롯 4개로 확인.
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=1, half_hour_index=10, status=AvailabilitySlot.UNCOMFORTABLE
+        )
+        AvailabilitySlot.objects.create(
+            participant=self.bob, weekday=1, half_hour_index=10, status=AvailabilitySlot.COMFORTABLE
+        )
+
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=2, half_hour_index=20, status=AvailabilitySlot.NEUTRAL
+        )
+        AvailabilitySlot.objects.create(
+            participant=self.bob, weekday=2, half_hour_index=20, status=AvailabilitySlot.NEUTRAL
+        )
+
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=3, half_hour_index=30, status=AvailabilitySlot.COMFORTABLE
+        )
+        AvailabilitySlot.objects.create(
+            participant=self.bob, weekday=3, half_hour_index=30, status=AvailabilitySlot.COMFORTABLE
+        )
+
+        AvailabilitySlot.objects.create(
+            participant=self.alice, weekday=4, half_hour_index=40, status=AvailabilitySlot.COMFORTABLE
+        )
+        # bob은 (4,40)에 응답하지 않음 -> missing=1
+
+        # 나머지 332개 슬롯은 전부 완전히 빈 슬롯(unc=0, missing=2)이라 slot_mid보다는 뒤,
+        # slot_bad(unc=1)보다는 앞에 낀다. 그래서 "상위 4개"가 아니라 이 4개 슬롯끼리의
+        # 상대 순서만 확인한다.
+        ranked = services.rank_candidate_slots([str(self.alice.id), str(self.bob.id)])
+        positions = {(c["weekday"], c["half_hour_index"]): i for i, c in enumerate(ranked)}
+        slot_best, slot_mid, slot_missing, slot_bad = (3, 30), (2, 20), (4, 40), (1, 10)
+        self.assertLess(positions[slot_best], positions[slot_mid])
+        self.assertLess(positions[slot_mid], positions[slot_missing])
+        self.assertLess(positions[slot_missing], positions[slot_bad])
+
     def test_candidate_ids_are_strings_not_uuid_objects(self):
         # participant_id는 UUID 필드라 slot.participant_id는 uuid.UUID 인스턴스다. views.py는
         # 항상 str(pid)로 비교하므로, services.py도 str로 저장하지 않으면 매칭이 항상 실패해

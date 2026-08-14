@@ -117,14 +117,16 @@ def detect_bias_alert(user, window=RECENT_WINDOW):
 # ---------------------------------------------------------------------------
 # 알고리즘: 주간 반복 336개(7일 x 48슬롯) 후보 슬롯 전부에 대해 참가자 전원의 상태를 모으고
 #   1순위: 불편(UNCOMFORTABLE) 인원 수 최소화
-#   2순위: 보통(NEUTRAL) 인원 수 최소화 (= 편한 인원 최대화와 사실상 동치)
-#   3순위: 미응답(해당 슬롯에 아무 상태도 기록 안 한 참가자) 인원 수 최소화
+#   2순위: 미응답(해당 슬롯에 아무 상태도 기록 안 한 참가자) 인원 수 최소화
+#   3순위: 보통(NEUTRAL) 인원 수 최소화 (= 편한 인원 최대화와 사실상 동치)
 #   4순위: weekday, half_hour_index 오름차순 (완전 동점일 때 결과를 결정적으로 만들기 위함 +
 #          이왕이면 이른 시간을 우선 추천)
-# CLAUDE.md 요청사항 "불편 인원 최소화 우선, 그다음 보통 인원 최소화"를 그대로 1·2순위로 채택했고,
-# 3순위(미응답 최소화)를 추가한 이유는: 아무도 응답 안 한 슬롯이 우연히 uncomfortable=0,
-# neutral=0이 되어 "가장 좋은 슬롯"으로 잘못 뽑히는 걸 막기 위함이다(정보가 없는 것과 실제로
-# 편한 것은 다르다).
+# CLAUDE.md 요청사항 "불편 인원 최소화 우선, 그다음 보통 인원 최소화"를 1·3순위로 채택했고,
+# 미응답 최소화를 그 사이(2순위)에 끼워 넣은 이유는: 아무도 응답 안 한 슬롯은 uncomfortable=0,
+# neutral=0이라 "가장 좋은 슬롯"으로 착시를 일으키기 쉬운데, 미응답을 neutral보다 먼저 비교해야
+# 실제로 누군가 응답한(그 응답이 설령 neutral이더라도) 슬롯이 정보가 아예 없는 빈 슬롯보다
+# 앞선다 — 정보가 없는 것과 실제로 "보통"이라고 답한 것은 다르다. (neutral을 미응답보다 먼저
+# 비교하면 빈 슬롯의 neutral_count가 항상 0이라 오히려 빈 슬롯이 이겨버리는 버그가 있었다.)
 
 
 def _slot_status_map(participant_ids):
@@ -166,8 +168,8 @@ def rank_candidate_slots(participant_ids):
     candidates.sort(
         key=lambda c: (
             c["uncomfortable_count"],
-            c["neutral_count"],
             c["missing_count"],
+            c["neutral_count"],
             c["weekday"],
             c["half_hour_index"],
         )
