@@ -156,10 +156,10 @@ class MeetingConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_chat_message(self, message, is_speech_card):
-        meeting = MeetingSession.objects.filter(room_code=self.room_code).first()
-        if meeting:
+        meeting_id = MeetingSession.objects.filter(room_code=self.room_code).values_list('id', flat=True).first()
+        if meeting_id:
             MeetingChatMessage.objects.create(
-                meeting=meeting,
+                meeting_id=meeting_id,
                 sender=self.user,
                 message=message,
                 is_speech_card=is_speech_card
@@ -167,10 +167,10 @@ class MeetingConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_transcript(self, original_text, translations):
-        meeting = MeetingSession.objects.filter(room_code=self.room_code).first()
-        if meeting:
+        meeting_id = MeetingSession.objects.filter(room_code=self.room_code).values_list('id', flat=True).first()
+        if meeting_id:
             MeetingTranscript.objects.create(
-                meeting=meeting,
+                meeting_id=meeting_id,
                 speaker=self.user,
                 original_text=original_text,
                 translations=translations
@@ -178,26 +178,34 @@ class MeetingConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def set_participant_active_status(self, is_active):
-        meeting = MeetingSession.objects.filter(room_code=self.room_code).first()
+        meeting = MeetingSession.objects.only('id', 'host_id').filter(room_code=self.room_code).first()
         if meeting:
             participant, _ = MeetingParticipant.objects.get_or_create(
-                meeting=meeting,
+                meeting_id=meeting.id,
                 user=self.user,
-                defaults={'is_host': meeting.host == self.user}
+                defaults={'is_host': meeting.host_id == self.user.id}
             )
             participant.is_active = is_active
-            participant.save()
+            participant.save(update_fields=['is_active'])
 
     @database_sync_to_async
     def update_participant_media_status(self, is_mic_on, is_camera_on, is_speaking):
-        meeting = MeetingSession.objects.filter(room_code=self.room_code).first()
-        if meeting:
-            participant = MeetingParticipant.objects.filter(meeting=meeting, user=self.user).first()
-            if participant:
-                if is_mic_on is not None:
-                    participant.is_mic_on = is_mic_on
-                if is_camera_on is not None:
-                    participant.is_camera_on = is_camera_on
-                if is_speaking is not None:
-                    participant.is_speaking = is_speaking
-                participant.save()
+        participant = MeetingParticipant.objects.filter(
+            meeting__room_code=self.room_code,
+            user=self.user
+        ).first()
+
+        if participant:
+            update_fields = []
+            if is_mic_on is not None:
+                participant.is_mic_on = is_mic_on
+                update_fields.append('is_mic_on')
+            if is_camera_on is not None:
+                participant.is_camera_on = is_camera_on
+                update_fields.append('is_camera_on')
+            if is_speaking is not None:
+                participant.is_speaking = is_speaking
+                update_fields.append('is_speaking')
+
+            if update_fields:
+                participant.save(update_fields=update_fields)

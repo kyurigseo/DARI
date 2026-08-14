@@ -3,7 +3,6 @@
 import io
 import os
 import httpx
-import urllib.parse
 import json
 from django.conf import settings
 from .models import MeetingSession, MeetingTranscript, MeetingChatMessage, MeetingSummary, ActionItem, MeetingMemo
