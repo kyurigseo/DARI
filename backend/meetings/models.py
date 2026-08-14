@@ -95,3 +95,86 @@ class MeetingChatMessage(models.Model):
 
     def __str__(self):
         return f"[{self.sender.username}] {self.message[:20]}"
+
+class MeetingSummary(models.Model):
+    """
+    [AI 회의 요약 모델 (S-002)]
+    회의 종료 후 LLM이 생성한 전체 핵심 요약문 저장
+    """
+    meeting = models.OneToOneField(
+        MeetingSession,
+        on_delete=models.CASCADE,
+        related_name='summary'
+    )
+    content = models.TextField(help_text="AI가 생성한 회의 요약 본문")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"[{self.meeting.title}] AI 요약"
+
+
+class MeetingMemo(models.Model):
+    """
+    [사용자별 직접 메모/요약 모델]
+    회의별로 사용자가 직접 작성하고 관리하는 개인 메모
+    """
+    meeting = models.ForeignKey(
+        MeetingSession,
+        on_delete=models.CASCADE,
+        related_name='memos'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='meeting_memos'
+    )
+    content = models.TextField(help_text="사용자 직접 메모 내용")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.user.username}] {self.meeting.title} 메모 ({self.content[:15]})"
+
+
+class ActionItem(models.Model):
+    """
+    [Action Item 관리 모델 (S-003)]
+    AI 추출 및 사용자가 편집 가능한 할 일, 담당자, 마감 기한, 완료 여부
+    """
+    meeting = models.ForeignKey(
+        MeetingSession,
+        on_delete=models.CASCADE,
+        related_name='action_items'
+    )
+    task = models.CharField(max_length=255, help_text="할 일 내용")
+
+    assignee = models.CharField(
+        max_length=100,
+        default='미지정',
+        blank=True,
+        help_text="담당자 이름 (기본값: 미지정)"
+    )
+
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="마감 기한 (미지정 시 None)"
+    )
+
+    is_completed = models.BooleanField(
+        default=False,
+        help_text="완료 여부 체크박스 상태"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        status = "완료" if self.is_completed else "진행중"
+        return f"[{status}] {self.task} ({self.assignee} · {self.due_date or '기한 미지정'})"

@@ -1,13 +1,24 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
-from rest_framework import status
+import threading
+from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage
-from .serializers import MeetingSessionSerializer, ParticipantSerializer, SpeechCardSerializer, MeetingChatMessageSerializer
+from django.core.mail import send_mail
+from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
 from .utils import generate_media_server_token
+from .services import MeetingSummaryPipeline, MeetingShareFormatter
+from .serializers import (
+    MeetingSessionSerializer,
+    ParticipantSerializer,
+    SpeechCardSerializer,
+    MeetingChatMessageSerializer
+    MeetingSummaryTabSerializer,
+    MeetingMemoSerializer,
+    ActionItemSerializer
+)
 
 User = get_user_model()
 
@@ -118,3 +129,236 @@ class KickParticipantView(APIView):
             return Response({'message': '참가자를 회의에서 내보냈습니다.'}, status=status.HTTP_200_OK)
 
         return Response({'error': '해당 참가자를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+class EndMeetingView(APIView):
+    """
+    [회의 종료 API]
+    호스트 권한으로 회의를 종료하고, 백그라운드에서 AI 요약 & Action Item 파이프라인을 실행
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+        if meeting.host != request.user:
+            return Response({'error': '회의를 종료할 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        meeting.status = 'ENDED'
+        meeting.save()
+        threading.Thread(
+            target=MeetingSummaryPipeline.generate_summary_and_action_items,
+            args=(meeting.id,)
+        ).start()
+
+        return Response({
+            'message': '회의가 성공적으로 종료되었으며, AI 요약 생성이 시작되었습니다.',
+            'room_code': meeting.room_code,
+            'status': meeting.status
+        }, status=status.HTTP_200_OK)
+
+class UserMeetingListView(APIView):
+    """
+    [상단 탭 UI용 회의 목록 조회 API]
+    사용자가 호스트이거나 참가했던 회의 목록 반환
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        meetings = MeetingSession.objects.filter(
+            models.Q(host=user) | models.Q(participants__user=user)
+        ).distinct().order_by('-created_at')
+
+        serializer = MeetingSummaryTabSerializer(meetings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MeetingReportDetailView(APIView):
+    """
+    [특정 회의 상세 리포트 조회 API]
+    - 회의 기본 정보 및 상단 타이틀
+    - AI 요약문
+    - 본인이 작성한 메모 리스트
+    - 회의의 Action Item 리스트
+    - 회의 참가자 명단 (담당자 지정 모달 연동용)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+
+        summary_obj = getattr(meeting, 'summary', None)
+        summary_content = summary_obj.content if summary_obj else "아직 생성된 회의 요약이 없습니다."
+
+        memos = MeetingMemo.objects.filter(meeting=meeting, user=request.user)
+        memo_serializer = MeetingMemoSerializer(memos, many=True)
+
+        action_items = ActionItem.objects.filter(meeting=meeting)
+        action_item_serializer = ActionItemSerializer(action_items, many=True)
+
+        participants_data = []
+        participants_data.append({
+            'name': request.user.username if meeting.host == request.user else meeting.host.username,
+            'is_host': True,
+            'is_me': meeting.host == request.user
+        })
+        for p in meeting.participants.exclude(user=meeting.host):
+            participants_data.append({
+                'name': p.user.username,
+                'is_host': False,
+                'is_me': p.user == request.user
+            })
+
+        return Response({
+            'room_code': meeting.room_code,
+            'title': meeting.title,
+            'display_header': f"{meeting.title} · {meeting.created_at.month}/{meeting.created_at.day}",
+            'ai_summary': summary_content,
+            'memos': memo_serializer.data,
+            'action_items': action_item_serializer.data,
+            'participants': participants_data
+        }, status=status.HTTP_200_OK)
+
+
+class MeetingMemoListCreateView(APIView):
+    """
+    [메모 목록 조회 및 작성 API]
+    GET: 해당 회의에 내가 쓴 메모 목록
+    POST: 새 메모 작성 저장
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        memos = MeetingMemo.objects.filter(meeting=meeting, user=request.user)
+        serializer = MeetingMemoSerializer(memos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        content = request.data.get('content', '').strip()
+
+        if not content:
+            return Response({'error': '메모 내용을 입력해 주세요.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        memo = MeetingMemo.objects.create(
+            meeting=meeting,
+            user=request.user,
+            content=content
+        )
+        serializer = MeetingMemoSerializer(memo)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class MeetingMemoDeleteView(APIView):
+    """
+    [메모 삭제 API]
+    메모 우측 x 버튼 클릭 시 삭제 처리
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, memo_id):
+        memo = get_object_or_404(MeetingMemo, id=memo_id, user=request.user)
+        memo.delete()
+        return Response({'message': '메모가 삭제되었습니다.'}, status=status.HTTP_200_OK)
+
+
+class ActionItemUpdateView(APIView):
+    """
+    [Action Item 수정 API (PATCH)]
+    - 완료 체크박스 상태 토글 (`is_completed`)
+    - 담당자 변경 (`assignee`)
+    - 마감 기한 변경 (`due_date`: "YYYY-MM-DD" 또는 null)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, item_id):
+        action_item = get_object_or_404(ActionItem, id=item_id)
+        data = request.data
+        if 'is_completed' in data:
+            action_item.is_completed = bool(data['is_completed'])
+
+        if 'assignee' in data:
+            action_item.assignee = str(data['assignee']).strip() or '미지정'
+
+        if 'due_date' in data:
+            due_date_val = data['due_date']
+            action_item.due_date = due_date_val if due_date_val else None
+
+        action_item.save()
+        serializer = ActionItemSerializer(action_item)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class MeetingShareTextView(APIView):
+    """
+    [Slack / 클립보드 복사 및 mailto 생성 API]
+    - formatted_text: 슬랙이나 메모장에 붙여넣을 완성된 텍스트
+    - mailto_link: 클릭 시 이메일 앱(Outlook, 기본 메일 앱)을 띄우는 링크 파라미터
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+        formatted_text = MeetingShareFormatter.generate_formatted_text(meeting, request.user)
+
+        email_subject = f"[DARI] {meeting.title} 회의 요약 및 Action Items"
+        encoded_subject = urllib.parse.quote(email_subject)
+        encoded_body = urllib.parse.quote(formatted_text)
+        mailto_link = f"mailto:?subject={encoded_subject}&body={encoded_body}"
+
+        return Response({
+            'meeting_title': meeting.title,
+            'formatted_text': formatted_text,
+            'mailto_link': mailto_link
+        }, status=status.HTTP_200_OK)
+
+
+class MeetingEmailSendView(APIView):
+    """
+    [Django SMTP 기반 회의 결과 이메일 직접 전송 API]
+    - 참석자 전원 또는 입력받은 이메일 목록으로 전송
+    - 전송 실패 시 예외 처리 및 에러 안내
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        target_emails = request.data.get('emails', [])
+
+        if not target_emails:
+            participant_emails = [
+                p.user.email for p in meeting.participants.all() if p.user.email
+            ]
+            if meeting.host.email:
+                participant_emails.append(meeting.host.email)
+            target_emails = list(set(participant_emails))
+
+        if not target_emails:
+            return Response(
+                {'error': '결과를 전송할 이메일 주소가 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        formatted_text = MeetingShareFormatter.generate_formatted_text(meeting, request.user)
+        subject = f"[DARI] {meeting.title} 회의 요약 및 Action Items"
+
+        try:
+            send_mail(
+                subject=subject,
+                message=formatted_text,
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@dari.com'),
+                recipient_list=target_emails,
+                fail_silently=False,
+            )
+            return Response({
+                'message': f'{len(target_emails)}명에게 회의 결과가 성공적으로 전송되었습니다.',
+                'sent_to': target_emails
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': '이메일 전송 중 오류가 발생했습니다. 네트워크 상태를 확인하고 잠시 후 다시 시도해 주세요.',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
