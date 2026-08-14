@@ -42,3 +42,20 @@ class MeetingParticipant(models.Model):
 
     def __str__(self):
         return f"{self.user.username} in {self.meeting.room_code}"
+
+class MeetingTranscript(models.Model):
+    meeting = models.ForeignKey(MeetingSession, on_delete=models.CASCADE, related_name='transcripts')
+    speaker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    original_text = models.TextField()
+    speaker_lang = models.CharField(max_length=10, default='auto') # 발언자 언어
+
+    translations = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"[{self.speaker.username}] {self.original_text[:20]}"
