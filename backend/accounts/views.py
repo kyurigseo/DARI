@@ -1,9 +1,9 @@
 from rest_framework import generics, permissionsm, status
-
-from .serializers import SignupSerializer, UserSerializer, MyPageResponseSerializer
+from .serializers import SignupSerializer, UserSerializer, MyPageResponseSerializer, UserProfileUpdateSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import UserProfile
 
 
@@ -34,3 +34,4 @@ class MyPageDetailView(APIView):
 
         serializer = MyPageResponseSerializer(user, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+

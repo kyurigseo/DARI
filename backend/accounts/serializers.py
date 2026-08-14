@@ -1,79 +1,64 @@
-from django.contrib.auth.password_validation import validate_password
-from rest_framework import serializers
-from .models import User,  UserProfile
-from django.contrib.auth import get_user_model
-from django.db.models import Q
-from meetings.models import MeetingSession, SpeechCard
-
-class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, validators=[validate_password])
-
-    class Meta:
-        model = User
-        fields = ["id", "username", "email", "password", "country", "role"]
-        read_only_fields = ["id"]
-
-    def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+from rest_framework import generics, permissions, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from .models import UserProfile
+from .serializers import (
+    SignupSerializer,
+    UserSerializer,
+    MyPageResponseSerializer,
+    UserProfileUpdateSerializer
+)
 
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ["id", "username", "email", "country", "role", "date_joined"]
-        read_only_fields = fields
+class SignupView(generics.CreateAPIView):
+    serializer_class = SignupSerializer
+    permission_classes = [permissions.AllowAny]
 
-User = get_user_model()
 
-class MyPageResponseSerializer(serializers.ModelSerializer):
+class MeView(generics.RetrieveAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
+class MyPageDetailView(APIView):
     """
-    [마이페이지 종합 조회 시리얼라이저]
-    - 기본 프로필 정보
-    - 활동 통계 (발언카드, 리허설, 참여 회의 수)
-    - 환경 설정 (알림, 번역 언어)
+    [마이페이지 종합 API]
+    - GET: 현재 로그인된 사용자의 프로필, 활동 통계, 환경설정 반환
+    - PATCH / PUT: 내 정보 수정 모달 데이터 업데이트 (이름, 직함·팀, 이메일, 프로필 사진)
     """
-    name = serializers.CharField(source='username', read_only=True)
-    position_team = serializers.CharField(source='profile.position_team', read_only=True)
-    profile_image = serializers.SerializerMethodField()
-    stats = serializers.SerializerMethodField()
-    settings = serializers.SerializerMethodField()
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
-    class Meta:
-        model = User
-        fields = [
-            'id',
-            'name',
-            'email',
-            'position_team',
-            'profile_image',
-            'stats',
-            'settings',
-        ]
+    def get(self, request):
+        user = request.user
+        if not hasattr(user, 'profile'):
+            UserProfile.objects.create(user=user)
 
-    def get_profile_image(self, obj):
-        if hasattr(obj, 'profile') and obj.profile.profile_image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.profile.profile_image.url)
-            return obj.profile.profile_image.url
-        return None
+        serializer = MyPageResponseSerializer(user, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def get_stats(self, obj):
-        saved_cards_count = SpeechCard.objects.filter(user=obj).count() if hasattr(SpeechCard, 'user') else SpeechCard.objects.count()
-        completed_rehearsals = getattr(obj.profile, 'completed_rehearsals_count', 0) if hasattr(obj, 'profile') else 0
-        joined_meetings_count = MeetingSession.objects.filter(
-            Q(host=obj) | Q(participants__user=obj)
-        ).distinct().count()
+    def patch(self, request):
+        user = request.user
+        if not hasattr(user, 'profile'):
+            UserProfile.objects.create(user=user)
 
-        return {
-            'saved_speech_cards_count': saved_cards_count,
-            'completed_rehearsals_count': completed_rehearsals,
-            'joined_meetings_count': joined_meetings_count,
-        }
+        serializer = UserProfileUpdateSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            response_serializer = MyPageResponseSerializer(user, context={'request': request})
+            return Response(
+                {
+                    "message": "프로필 정보가 성공적으로 수정되었습니다.",
+                    "data": response_serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
 
-    def get_settings(self, obj):
-        profile = getattr(obj, 'profile', None)
-        return {
-            'notification_enabled': profile.notification_enabled if profile else True,
-            'preferred_language': profile.preferred_language if profile else '한국어',
-        }
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request):
+        return self.patch(request)
