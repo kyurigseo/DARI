@@ -1,4 +1,5 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
+import threading
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,6 +9,7 @@ from django.contrib.auth import get_user_model
 from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage
 from .serializers import MeetingSessionSerializer, ParticipantSerializer, SpeechCardSerializer, MeetingChatMessageSerializer
 from .utils import generate_media_server_token
+from .services import MeetingSummaryPipeline
 
 User = get_user_model()
 
@@ -118,3 +120,29 @@ class KickParticipantView(APIView):
             return Response({'message': '참가자를 회의에서 내보냈습니다.'}, status=status.HTTP_200_OK)
 
         return Response({'error': '해당 참가자를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+class EndMeetingView(APIView):
+    """
+    [회의 종료 API]
+    호스트 권한으로 회의를 종료하고, 백그라운드에서 AI 요약 & Action Item 파이프라인을 실행
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+        if meeting.host != request.user:
+            return Response({'error': '회의를 종료할 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        meeting.status = 'ENDED'
+        meeting.save()
+        threading.Thread(
+            target=MeetingSummaryPipeline.generate_summary_and_action_items,
+            args=(meeting.id,)
+        ).start()
+
+        return Response({
+            'message': '회의가 성공적으로 종료되었으며, AI 요약 생성이 시작되었습니다.',
+            'room_code': meeting.room_code,
+            'status': meeting.status
+        }, status=status.HTTP_200_OK)

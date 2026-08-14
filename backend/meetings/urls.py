@@ -6,6 +6,7 @@ from .views import (
     SpeechCardListView,
     ParticipantManageView,
     KickParticipantView
+    EndMeetingView
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('<str:room_code>/token/', MediaTokenView.as_view(), name='media-token'),
     path('<str:room_code>/participants/', ParticipantManageView.as_view(), name='participant-manage'),
     path('<str:room_code>/kick/', KickParticipantView.as_view(), name='participant-kick'),
+    path('<str:room_code>/end/', EndMeetingView.as_view(), name='end-meeting'),
 ]
