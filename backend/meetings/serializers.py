@@ -1,7 +1,8 @@
 # 회의 API 시리얼라이저
 
 from rest_framework import serializers
-from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage
+from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
+
 
 class SpeechCardSerializer(serializers.ModelSerializer):
     class Meta:
@@ -31,3 +32,45 @@ class MeetingSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = MeetingSession
         fields = ['id', 'room_code', 'title', 'host', 'status', 'created_at', 'participants']
+
+class MeetingSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeetingSummary
+        fields = ['id', 'content', 'created_at', 'updated_at']
+
+
+class MeetingMemoSerializer(serializers.ModelSerializer):
+    formatted_created_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MeetingMemo
+        fields = ['id', 'content', 'created_at', 'formatted_created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_formatted_created_at(self, obj):
+        return f"{obj.created_at.month}/{obj.created_at.day} {obj.created_at.strftime('%H:%M')} 저장됨"
+
+
+class ActionItemSerializer(serializers.ModelSerializer):
+    formatted_due_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ActionItem
+        fields = ['id', 'task', 'assignee', 'due_date', 'formatted_due_date', 'is_completed']
+
+    def get_formatted_due_date(self, obj):
+        if obj.due_date:
+            return f"{obj.due_date.month}/{obj.due_date.day}"
+        return None
+
+
+class MeetingSummaryTabSerializer(serializers.ModelSerializer):
+    """상단 회의 선택 칩 탭용 간단 목록 시리얼라이저"""
+    tab_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MeetingSession
+        fields = ['room_code', 'title', 'tab_title', 'status', 'created_at']
+
+    def get_tab_title(self, obj):
+        return f"{obj.title} · {obj.created_at.month}/{obj.created_at.day}"

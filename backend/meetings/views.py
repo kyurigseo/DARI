@@ -1,15 +1,23 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
 import threading
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage
-from .serializers import MeetingSessionSerializer, ParticipantSerializer, SpeechCardSerializer, MeetingChatMessageSerializer
+from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
 from .utils import generate_media_server_token
 from .services import MeetingSummaryPipeline
+from .serializers import (
+    MeetingSessionSerializer,
+    ParticipantSerializer,
+    SpeechCardSerializer,
+    MeetingChatMessageSerializer
+    MeetingSummaryTabSerializer,
+    MeetingMemoSerializer,
+    ActionItemSerializer
+)
 
 User = get_user_model()
 
@@ -146,3 +154,137 @@ class EndMeetingView(APIView):
             'room_code': meeting.room_code,
             'status': meeting.status
         }, status=status.HTTP_200_OK)
+
+class UserMeetingListView(APIView):
+    """
+    [상단 탭 UI용 회의 목록 조회 API]
+    사용자가 호스트이거나 참가했던 회의 목록 반환
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        meetings = MeetingSession.objects.filter(
+            models.Q(host=user) | models.Q(participants__user=user)
+        ).distinct().order_by('-created_at')
+
+        serializer = MeetingSummaryTabSerializer(meetings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MeetingReportDetailView(APIView):
+    """
+    [특정 회의 상세 리포트 조회 API]
+    - 회의 기본 정보 및 상단 타이틀
+    - AI 요약문
+    - 본인이 작성한 메모 리스트
+    - 회의의 Action Item 리스트
+    - 회의 참가자 명단 (담당자 지정 모달 연동용)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+
+        summary_obj = getattr(meeting, 'summary', None)
+        summary_content = summary_obj.content if summary_obj else "아직 생성된 회의 요약이 없습니다."
+
+        memos = MeetingMemo.objects.filter(meeting=meeting, user=request.user)
+        memo_serializer = MeetingMemoSerializer(memos, many=True)
+
+        action_items = ActionItem.objects.filter(meeting=meeting)
+        action_item_serializer = ActionItemSerializer(action_items, many=True)
+
+        participants_data = []
+        participants_data.append({
+            'name': request.user.username if meeting.host == request.user else meeting.host.username,
+            'is_host': True,
+            'is_me': meeting.host == request.user
+        })
+        for p in meeting.participants.exclude(user=meeting.host):
+            participants_data.append({
+                'name': p.user.username,
+                'is_host': False,
+                'is_me': p.user == request.user
+            })
+
+        return Response({
+            'room_code': meeting.room_code,
+            'title': meeting.title,
+            'display_header': f"{meeting.title} · {meeting.created_at.month}/{meeting.created_at.day}",
+            'ai_summary': summary_content,
+            'memos': memo_serializer.data,
+            'action_items': action_item_serializer.data,
+            'participants': participants_data
+        }, status=status.HTTP_200_OK)
+
+
+class MeetingMemoListCreateView(APIView):
+    """
+    [메모 목록 조회 및 작성 API]
+    GET: 해당 회의에 내가 쓴 메모 목록
+    POST: 새 메모 작성 저장
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        memos = MeetingMemo.objects.filter(meeting=meeting, user=request.user)
+        serializer = MeetingMemoSerializer(memos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        content = request.data.get('content', '').strip()
+
+        if not content:
+            return Response({'error': '메모 내용을 입력해 주세요.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        memo = MeetingMemo.objects.create(
+            meeting=meeting,
+            user=request.user,
+            content=content
+        )
+        serializer = MeetingMemoSerializer(memo)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class MeetingMemoDeleteView(APIView):
+    """
+    [메모 삭제 API]
+    메모 우측 x 버튼 클릭 시 삭제 처리
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, memo_id):
+        memo = get_object_or_404(MeetingMemo, id=memo_id, user=request.user)
+        memo.delete()
+        return Response({'message': '메모가 삭제되었습니다.'}, status=status.HTTP_200_OK)
+
+
+class ActionItemUpdateView(APIView):
+    """
+    [Action Item 수정 API (PATCH)]
+    - 완료 체크박스 상태 토글 (`is_completed`)
+    - 담당자 변경 (`assignee`)
+    - 마감 기한 변경 (`due_date`: "YYYY-MM-DD" 또는 null)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, item_id):
+        action_item = get_object_or_404(ActionItem, id=item_id)
+        data = request.data
+        if 'is_completed' in data:
+            action_item.is_completed = bool(data['is_completed'])
+
+        if 'assignee' in data:
+            action_item.assignee = str(data['assignee']).strip() or '미지정'
+
+        if 'due_date' in data:
+            due_date_val = data['due_date']
+            action_item.due_date = due_date_val if due_date_val else None
+
+        action_item.save()
+        serializer = ActionItemSerializer(action_item)
+        return Response(serializer.data, status=status.HTTP_200_OK)
