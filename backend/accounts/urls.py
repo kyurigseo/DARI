@@ -15,5 +15,6 @@ urlpatterns = [
     path("me/", MeView.as_view(), name="me"),
     path('mypage/', MyPageDetailView.as_view(), name='mypage-detail'),
     path('mypage/settings/', UserSettingsUpdateView.as_view(), name='mypage-settings-update'),
+    path('logout/', LogoutView.as_view(), name='logout'),
 
 ]
