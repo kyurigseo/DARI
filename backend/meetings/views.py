@@ -1,5 +1,6 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
 import threading
+import urllib.parse
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -14,7 +15,7 @@ from .serializers import (
     MeetingSessionSerializer,
     ParticipantSerializer,
     SpeechCardSerializer,
-    MeetingChatMessageSerializer
+    MeetingChatMessageSerializer,
     MeetingSummaryTabSerializer,
     MeetingMemoSerializer,
     ActionItemSerializer
