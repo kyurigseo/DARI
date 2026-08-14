@@ -1,0 +1,97 @@
+# 회의 세션 및 참가자 모델
+
+import uuid
+from django.db import models
+from django.conf import settings
+
+class MeetingSession(models.Model):
+    STATUS_CHOICES = (
+        ('WAITING', '대기 중'),
+        ('ONGOING', '진행 중'),
+        ('ENDED', '종료됨'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    room_code = models.CharField(max_length=50, unique=True, db_index=True)
+    title = models.CharField(max_length=255)
+    host = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='hosted_meetings')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='WAITING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"[{self.room_code}] {self.title}"
+
+
+class MeetingParticipant(models.Model):
+    meeting = models.ForeignKey(MeetingSession, on_delete=models.CASCADE, related_name='participants')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    is_host = models.BooleanField(default=False)
+
+
+    is_mic_on = models.BooleanField(default=True)
+    is_camera_on = models.BooleanField(default=True)
+    is_speaking = models.BooleanField(default=False)
+    local_time_zone = models.CharField(max_length=50, default='UTC')
+
+    joined_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True) # 현재 접속 여부
+
+    class Meta:
+        unique_together = ('meeting', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} in {self.meeting.room_code}"
+
+class MeetingTranscript(models.Model):
+    meeting = models.ForeignKey(MeetingSession, on_delete=models.CASCADE, related_name='transcripts')
+    speaker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    original_text = models.TextField()
+    speaker_lang = models.CharField(max_length=10, default='auto') # 발언자 언어
+
+    translations = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"[{self.speaker.username}] {self.original_text[:20]}"
+
+
+class SpeechCard(models.Model):
+    """
+    [MVP 2 카드 파트 연동] 사용자가 사전에 리허설을 통해 생성한 발언카드
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='speech_cards')
+    persona_name = models.CharField(max_length=100)
+    situation = models.CharField(max_length=255)
+    korean_script = models.TextField()
+    translated_script = models.TextField()
+    target_lang = models.CharField(max_length=10, default='EN')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.persona_name}] {self.situation}"
+
+
+class MeetingChatMessage(models.Model):
+    """
+    [실시간 채팅 DB 저장 (S-001)]
+    """
+    meeting = models.ForeignKey(MeetingSession, on_delete=models.CASCADE, related_name='chat_messages')
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    message = models.TextField()
+    is_speech_card = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"[{self.sender.username}] {self.message[:20]}"

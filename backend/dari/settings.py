@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     "rehearsal",
     "cards",
     "tracker",
+    'channels',
+    'meetings',
 ]
 
 MIDDLEWARE = [
@@ -75,6 +77,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "dari.wsgi.application"
+ASGI_APPLICATION = 'dari.asgi.application'
 
 
 # Database
@@ -145,3 +148,13 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [("127.0.0.1", 6379)],  # 로컬 Redis 기본 포트
+        },
+    },
+}
+MEDIA_SERVER_SECRET = 'your-media-server-secret-key-1234'
