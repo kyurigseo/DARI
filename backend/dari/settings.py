@@ -158,3 +158,5 @@ CHANNEL_LAYERS = {
     },
 }
 MEDIA_SERVER_SECRET = 'your-media-server-secret-key-1234'
+DEFAULT_FROM_EMAIL = 'noreply@dari.com'
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

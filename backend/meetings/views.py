@@ -6,9 +6,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
+from django.core.mail import send_mail
 from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
 from .utils import generate_media_server_token
-from .services import MeetingSummaryPipeline
+from .services import MeetingSummaryPipeline, MeetingShareFormatter
 from .serializers import (
     MeetingSessionSerializer,
     ParticipantSerializer,
@@ -288,3 +289,76 @@ class ActionItemUpdateView(APIView):
         action_item.save()
         serializer = ActionItemSerializer(action_item)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class MeetingShareTextView(APIView):
+    """
+    [Slack / 클립보드 복사 및 mailto 생성 API]
+    - formatted_text: 슬랙이나 메모장에 붙여넣을 완성된 텍스트
+    - mailto_link: 클릭 시 이메일 앱(Outlook, 기본 메일 앱)을 띄우는 링크 파라미터
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+        formatted_text = MeetingShareFormatter.generate_formatted_text(meeting, request.user)
+
+        email_subject = f"[DARI] {meeting.title} 회의 요약 및 Action Items"
+        encoded_subject = urllib.parse.quote(email_subject)
+        encoded_body = urllib.parse.quote(formatted_text)
+        mailto_link = f"mailto:?subject={encoded_subject}&body={encoded_body}"
+
+        return Response({
+            'meeting_title': meeting.title,
+            'formatted_text': formatted_text,
+            'mailto_link': mailto_link
+        }, status=status.HTTP_200_OK)
+
+
+class MeetingEmailSendView(APIView):
+    """
+    [Django SMTP 기반 회의 결과 이메일 직접 전송 API]
+    - 참석자 전원 또는 입력받은 이메일 목록으로 전송
+    - 전송 실패 시 예외 처리 및 에러 안내
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, room_code):
+        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        target_emails = request.data.get('emails', [])
+
+        if not target_emails:
+            participant_emails = [
+                p.user.email for p in meeting.participants.all() if p.user.email
+            ]
+            if meeting.host.email:
+                participant_emails.append(meeting.host.email)
+            target_emails = list(set(participant_emails))
+
+        if not target_emails:
+            return Response(
+                {'error': '결과를 전송할 이메일 주소가 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        formatted_text = MeetingShareFormatter.generate_formatted_text(meeting, request.user)
+        subject = f"[DARI] {meeting.title} 회의 요약 및 Action Items"
+
+        try:
+            send_mail(
+                subject=subject,
+                message=formatted_text,
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@dari.com'),
+                recipient_list=target_emails,
+                fail_silently=False,
+            )
+            return Response({
+                'message': f'{len(target_emails)}명에게 회의 결과가 성공적으로 전송되었습니다.',
+                'sent_to': target_emails
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'error': '이메일 전송 중 오류가 발생했습니다. 네트워크 상태를 확인하고 잠시 후 다시 시도해 주세요.',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

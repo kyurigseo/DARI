@@ -11,7 +11,9 @@ from .views import (
     MeetingReportDetailView,
     MeetingMemoListCreateView,
     MeetingMemoDeleteView,
-    ActionItemUpdateView
+    ActionItemUpdateView,
+    MeetingShareTextView,
+    MeetingEmailSendView
 )
 
 urlpatterns = [
@@ -27,4 +29,6 @@ urlpatterns = [
     path('<str:room_code>/memos/', MeetingMemoListCreateView.as_view(), name='meeting-memos'),
     path('memos/<int:memo_id>/', MeetingMemoDeleteView.as_view(), name='meeting-memo-delete'),
     path('action-items/<int:item_id>/', ActionItemUpdateView.as_view(), name='action-item-update'),
+    path('<str:room_code>/share-text/', MeetingShareTextView.as_view(), name='meeting-share-text'),
+    path('<str:room_code>/send-email/', MeetingEmailSendView.as_view(), name='meeting-send-email'),
 ]

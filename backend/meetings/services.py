@@ -3,9 +3,10 @@
 import io
 import os
 import httpx
-from django.conf import settings
+import urllib.parse
 import json
-from .models import MeetingSession, MeetingTranscript, MeetingChatMessage, MeetingSummary, ActionItem
+from django.conf import settings
+from .models import MeetingSession, MeetingTranscript, MeetingChatMessage, MeetingSummary, ActionItem, MeetingMemo
 
 # 언어 코드 매핑 테이블
 LANGUAGE_MAPPING = {
@@ -200,3 +201,37 @@ class MeetingSummaryPipeline:
                 due_date=due_date,
                 is_completed=False
             )
+
+class MeetingShareFormatter:
+    """
+    회의 요약, 내 메모, Action Items를 클립보드/Slack/메일 본문용 텍스트로 가공하는 포맷터
+    """
+    @staticmethod
+    def generate_formatted_text(meeting: MeetingSession, user) -> str:
+        month = meeting.created_at.month
+        day = meeting.created_at.day
+
+        title_line = f"📝 {meeting.title} ({month}/{day})"
+        summary_obj = getattr(meeting, 'summary', None)
+        summary_content = summary_obj.content if summary_obj else "요약 내용이 없습니다."
+        summary_block = f"[AI 요약]\n{summary_content}"
+
+        user_memos = MeetingMemo.objects.filter(meeting=meeting, user=user).order_by('created_at')
+        if user_memos.exists():
+            memos_text = "\n".join([f"- {memo.content}" for memo in user_memos])
+        else:
+            memos_text = "- 작성된 메모가 없습니다."
+        memo_block = f"[내 메모]\n{memos_text}"
+
+        action_items = ActionItem.objects.filter(meeting=meeting).order_by('created_at')
+        if action_items.exists():
+            items_list = []
+            for item in action_items:
+                status_str = "완료" if item.is_completed else "진행중"
+                due_str = f"마감 {item.due_date.month}/{item.due_date.day}" if item.due_date else "기한 미지정"
+                items_list.append(f"- [{status_str}] {item.task} ({item.assignee} · {due_str})")
+            action_block = f"[Action Items]\n" + "\n".join(items_list)
+        else:
+            action_block = "[Action Items]\n- 등록된 Action Item이 없습니다."
+
+        return f"{title_line}\n\n{summary_block}\n\n{memo_block}\n\n{action_block}"
