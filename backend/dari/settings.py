@@ -13,8 +13,12 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -161,6 +165,11 @@ MEDIA_SERVER_SECRET = 'your-media-server-secret-key-1234'
 # meetings -> tracker 서버 간 호출(ingest 엔드포인트) 인증용 공유 시크릿.
 # meetings 담당자와 값 공유 후 운영 환경에서는 환경변수로 교체할 것.
 INTERNAL_SERVICE_TOKEN = os.environ.get('INTERNAL_SERVICE_TOKEN', 'dev-internal-token-change-me')
+
+# Groq API (rehearsal AI 리허설 엔진). 실제 키는 .env에서 로드되며 저장소에 커밋되지 않는다.
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+GROQ_MODEL_NAME = os.environ.get('GROQ_MODEL_NAME', 'llama-3.3-70b-versatile')
+GROQ_TIMEOUT_SECONDS = int(os.environ.get('GROQ_TIMEOUT_SECONDS', '12'))
 DEFAULT_FROM_EMAIL = 'noreply@dari.com'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
