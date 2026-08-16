@@ -30,7 +30,9 @@ class AIServicePipeline:
         headers = {"Authorization": f"Bearer {api_key}"}
 
 
-        audio_file = ("audio.wav", io.BytesIO(audio_bytes), "audio/wav")
+        # 브라우저 MediaRecorder는 기본적으로 webm/opus 컨테이너로 청크를 만들어 보낸다.
+        # (wav로 잘못 라벨링하면 Whisper가 디코딩에 실패할 수 있다.)
+        audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
         files = {"file": audio_file}
         data = {"model": "whisper-1"}
 

@@ -11,14 +11,16 @@ import os
 
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
 import meetings.routing
+from meetings.channels_auth import JWTAuthMiddlewareStack
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dari.settings")
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
-    "websocket": AuthMiddlewareStack(
+    # 프론트는 JWT(access token)로 인증하므로 세션 기반 AuthMiddlewareStack 대신
+    # 쿼리스트링(?token=...)의 JWT를 검증하는 JWTAuthMiddlewareStack을 사용한다.
+    "websocket": JWTAuthMiddlewareStack(
         URLRouter(
             meetings.routing.websocket_urlpatterns
         )

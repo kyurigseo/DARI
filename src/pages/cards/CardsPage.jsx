@@ -1,12 +1,51 @@
 import { useEffect, useRef, useState } from 'react'
-import { initialCards } from './cardsMockData'
+import { getCards, deleteCard as deleteCardApi } from '../../api/cards'
+import { getLanguageMeta, koreanFlag, formatRelativeTime } from './languageMeta'
 import './CardsPage.css'
 
+function mapCard(raw) {
+  const meta = getLanguageMeta(raw.translated_language)
+  return {
+    id: raw.card_id,
+    persona: raw.partner_tag,
+    flag: meta.flag,
+    koreanFlag,
+    situation: raw.situation_label,
+    korean: raw.suggested_text,
+    translation: raw.translated_text,
+    language: meta.label,
+    languageName: meta.name,
+    savedAt: formatRelativeTime(raw.created_at),
+    tone: meta.tone,
+  }
+}
+
 function CardsPage() {
-  const [cards, setCards] = useState(initialCards)
+  const [cards, setCards] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [selectedCard, setSelectedCard] = useState(null)
   const [toast, setToast] = useState('')
   const toastTimerRef = useRef(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    getCards()
+      .then((data) => {
+        const results = data.results ?? data
+        if (isMounted) setCards(results.map(mapCard))
+      })
+      .catch(() => {
+        if (isMounted) showToast('카드를 불러오지 못했어요 😥')
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const showToast = (message) => {
     setToast(message)
@@ -29,12 +68,18 @@ function CardsPage() {
     }
   }
 
-  const deleteCard = (cardId) => {
+  const deleteCard = async (cardId) => {
+    const previousCards = cards
     setCards((currentCards) => currentCards.filter((card) => card.id !== cardId))
     setSelectedCard((currentCard) => (currentCard?.id === cardId ? null : currentCard))
-    showToast('카드를 삭제했어요 🗑️')
 
-    // TODO: 카드 API 명세 확정 후 서버 삭제 요청을 연결합니다.
+    try {
+      await deleteCardApi(cardId)
+      showToast('카드를 삭제했어요 🗑️')
+    } catch {
+      setCards(previousCards)
+      showToast('삭제에 실패했어요. 다시 시도해주세요.')
+    }
   }
 
   useEffect(() => {
@@ -73,7 +118,9 @@ function CardsPage() {
         <p>어떤 상황에서 어떤 말을 해야 하는지, 상대방 언어 번역까지 함께 확인하세요</p>
       </header>
 
-      {cards.length > 0 ? (
+      {isLoading ? (
+        <p>불러오는 중...</p>
+      ) : cards.length > 0 ? (
         <div className="speech-card-grid">
           {cards.map((card) => (
             <article className={`speech-card speech-card--${card.tone}`} key={card.id}>

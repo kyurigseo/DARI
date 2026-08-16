@@ -1,54 +1,75 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { meetingSummaries, teamMembers } from './summaryMockData'
+import {
+  getSummaryTabs,
+  getMeetingReport,
+  createMemo,
+  deleteMemo,
+  updateActionItem,
+  getShareText,
+  sendReportEmail,
+} from '../../api/meetings'
 import './SummaryPage.css'
 
-const formatTimestamp = (date) => {
-  const mm = date.getMonth() + 1
-  const dd = date.getDate()
-  const hh = String(date.getHours()).padStart(2, '0')
-  const min = String(date.getMinutes()).padStart(2, '0')
-  return `${mm}/${dd} ${hh}:${min} 저장됨`
-}
-
-const buildShareText = (meeting) => {
-  const items = meeting.actionItems
-    .map((item) => {
-      const assigneeText = item.assignee
-        ? ` (${item.assignee}${item.due ? ` · 마감 ${item.due}` : ''})`
-        : ''
-      return `- [${item.done ? '완료' : '진행중'}] ${item.label}${assigneeText}`
-    })
-    .join('\n')
-
-  return `${meeting.title} · ${meeting.date}\n\n[AI 요약]\n${meeting.aiSummary}\n\n[Action Items]\n${items}`
-}
-
 function SummaryPage() {
-  const { meetingId } = useParams()
+  const { meetingId: roomCode } = useParams()
   const navigate = useNavigate()
 
-  const [meetings, setMeetings] = useState(meetingSummaries)
-  const [notesByMeeting, setNotesByMeeting] = useState({})
+  const [tabs, setTabs] = useState([])
+  const [report, setReport] = useState(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [toast, setToast] = useState(null)
-  
-  // 모달 상태
+  const [isLoading, setIsLoading] = useState(true)
+
   const [assigneeTarget, setAssigneeTarget] = useState(null)
   const [dueTarget, setDueTarget] = useState(null)
   const [customAssignee, setCustomAssignee] = useState('')
 
   const toastTimerRef = useRef(null)
 
-  const activeId = meetings.some((m) => m.id === meetingId) ? meetingId : meetings[0].id
-  const activeMeeting = meetings.find((m) => m.id === activeId)
-  const activeNotes = notesByMeeting[activeId] ?? []
+  useEffect(() => {
+    let isMounted = true
 
-  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
+    getSummaryTabs()
+      .then((data) => {
+        if (!isMounted) return
+        setTabs(data)
+        if (!roomCode && data.length > 0) {
+          navigate(`/summary/${data[0].room_code}`, { replace: true })
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
+    if (!roomCode) return undefined
+    let isMounted = true
+    setIsLoading(true)
     setNoteDraft('')
-  }, [activeId])
+
+    getMeetingReport(roomCode)
+      .then((data) => {
+        if (isMounted) setReport(data)
+      })
+      .catch(() => {
+        if (isMounted) showToast('회의 정보를 불러오지 못했어요.')
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode])
+
+  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
 
   const showToast = (message) => {
     clearTimeout(toastTimerRef.current)
@@ -56,101 +77,134 @@ function SummaryPage() {
     toastTimerRef.current = setTimeout(() => setToast(null), 3000)
   }
 
-  const updateMeeting = (id, updater) => {
-    setMeetings((prev) => prev.map((meeting) => (meeting.id === id ? updater(meeting) : meeting)))
-  }
-
-  const handleTabClick = (id) => {
-    navigate(`/summary/${id}`)
+  const handleTabClick = (code) => {
+    navigate(`/summary/${code}`)
   }
 
   /* 메모 관련 */
-  const handleSaveNote = () => {
+  const handleSaveNote = async () => {
     const text = noteDraft.trim()
-    if (!text) return
+    if (!text || !roomCode) return
 
-    setNotesByMeeting((prev) => ({
-      ...prev,
-      [activeId]: [
-        { id: `note-${Date.now()}`, text, timestamp: formatTimestamp(new Date()) },
-        ...(prev[activeId] ?? []),
-      ],
-    }))
-    setNoteDraft('')
+    try {
+      const memo = await createMemo(roomCode, text)
+      setReport((prev) => ({ ...prev, memos: [memo, ...prev.memos] }))
+      setNoteDraft('')
+    } catch {
+      showToast('메모 저장에 실패했어요.')
+    }
   }
 
-  const handleDeleteNote = (noteId) => {
-    setNotesByMeeting((prev) => ({
-      ...prev,
-      [activeId]: (prev[activeId] ?? []).filter((note) => note.id !== noteId),
-    }))
+  const handleDeleteNote = async (memoId) => {
+    const previous = report
+    setReport((prev) => ({ ...prev, memos: prev.memos.filter((note) => note.id !== memoId) }))
+
+    try {
+      await deleteMemo(memoId)
+    } catch {
+      setReport(previous)
+      showToast('메모 삭제에 실패했어요.')
+    }
   }
 
   /* Action Item 관련 */
-  const toggleActionItem = (itemId) => {
-    updateMeeting(activeId, (meeting) => ({
-      ...meeting,
-      actionItems: meeting.actionItems.map((item) =>
-        item.id === itemId ? { ...item, done: !item.done } : item,
+  const toggleActionItem = async (item) => {
+    const previous = report
+    setReport((prev) => ({
+      ...prev,
+      action_items: prev.action_items.map((i) =>
+        i.id === item.id ? { ...i, is_completed: !i.is_completed } : i,
       ),
     }))
+
+    try {
+      await updateActionItem(item.id, { is_completed: !item.is_completed })
+    } catch {
+      setReport(previous)
+      showToast('업데이트에 실패했어요.')
+    }
   }
 
-  const assignMember = (itemId, memberName) => {
-    if (!memberName.trim()) return
+  const assignMember = async (itemId, memberName) => {
+    const name = memberName.trim()
+    if (!name) return
 
-    updateMeeting(activeId, (meeting) => ({
-      ...meeting,
-      actionItems: meeting.actionItems.map((item) =>
-        item.id === itemId ? { ...item, assignee: memberName.trim() } : item,
-      ),
-    }))
-    showToast(`${memberName.trim()}님을 담당자로 지정했어요✅`)
-    setAssigneeTarget(null)
-    setCustomAssignee('')
+    try {
+      const updated = await updateActionItem(itemId, { assignee: name })
+      setReport((prev) => ({
+        ...prev,
+        action_items: prev.action_items.map((i) => (i.id === itemId ? updated : i)),
+      }))
+      showToast(`${name}님을 담당자로 지정했어요✅`)
+    } catch {
+      showToast('담당자 지정에 실패했어요.')
+    } finally {
+      setAssigneeTarget(null)
+      setCustomAssignee('')
+    }
   }
 
-  const setDueDate = (itemId, month, day) => {
-    const dueText = `${Number(month)}/${Number(day)}`
-    updateMeeting(activeId, (meeting) => ({
-      ...meeting,
-      actionItems: meeting.actionItems.map((item) =>
-        item.id === itemId ? { ...item, due: dueText } : item,
-      ),
-    }))
-    showToast(`마감 기한을 ${dueText}로 설정했어요📅`)
-    setDueTarget(null)
+  const setDueDate = async (itemId, isoDate, displayText) => {
+    try {
+      const updated = await updateActionItem(itemId, { due_date: isoDate })
+      setReport((prev) => ({
+        ...prev,
+        action_items: prev.action_items.map((i) => (i.id === itemId ? updated : i)),
+      }))
+      showToast(`마감 기한을 ${displayText}로 설정했어요📅`)
+    } catch {
+      showToast('마감 기한 설정에 실패했어요.')
+    } finally {
+      setDueTarget(null)
+    }
+  }
+
+  const toIsoDate = (date) => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
   }
 
   const handleDateInput = (itemId, value) => {
     if (!value) return
     const [, month, day] = value.split('-')
-    setDueDate(itemId, month, day)
+    setDueDate(itemId, value, `${Number(month)}/${Number(day)}`)
   }
 
   const handlePresetDue = (itemId, daysToAdd) => {
     const d = new Date()
     d.setDate(d.getDate() + daysToAdd)
-    const month = d.getMonth() + 1
-    const day = d.getDate()
-    setDueDate(itemId, month, day)
+    setDueDate(itemId, toIsoDate(d), `${d.getMonth() + 1}/${d.getDate()}`)
   }
 
   /* 공유 관련 */
-  const handleEmailShare = () => {
-    const subject = encodeURIComponent(`${activeMeeting.title} · ${activeMeeting.date}`)
-    const body = encodeURIComponent(buildShareText(activeMeeting))
-    window.location.href = `mailto:?subject=${subject}&body=${body}`
-    showToast('메일 앱을 열었어요 ✉️ 제목·본문이 자동으로 채워져요')
+  const handleEmailShare = async () => {
+    try {
+      const data = await getShareText(roomCode)
+      window.location.href = data.mailto_link
+      showToast('메일 앱을 열었어요 ✉️ 제목·본문이 자동으로 채워져요')
+    } catch {
+      showToast('공유 텍스트를 가져오지 못했어요.')
+    }
   }
 
   const handleSlackShare = async () => {
     try {
-      await navigator.clipboard.writeText(buildShareText(activeMeeting))
-    } catch (error) {
-      console.warn('클립보드 복사 실패', error)
+      const data = await getShareText(roomCode)
+      await navigator.clipboard.writeText(data.formatted_text)
+      showToast('Slack에 붙여넣기 좋은 형식으로 복사했어요 📋 채널에 붙여넣기만 하면 돼요')
+    } catch {
+      showToast('복사에 실패했어요.')
     }
-    showToast('Slack에 붙여넣기 좋은 형식으로 복사했어요 📋 채널에 붙여넣기만 하면 돼요')
+  }
+
+  if (isLoading || !report) {
+    return (
+      <section className="summary-page">
+        <p>불러오는 중...</p>
+      </section>
+    )
   }
 
   return (
@@ -161,8 +215,8 @@ function SummaryPage() {
       </header>
 
       <div className="meeting-tabs" role="tablist" aria-label="회의 선택">
-        {meetings.map((meeting) => {
-          const isActive = meeting.id === activeId
+        {tabs.map((tab) => {
+          const isActive = tab.room_code === roomCode
 
           return (
             <button
@@ -170,21 +224,19 @@ function SummaryPage() {
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => handleTabClick(meeting.id)}
-              key={meeting.id}
+              onClick={() => handleTabClick(tab.room_code)}
+              key={tab.room_code}
             >
-              {meeting.title} · {meeting.date}
+              {tab.tab_title}
             </button>
           )
         })}
       </div>
 
       <article className="summary-card">
-        <h2 className="summary-card__title">
-          {activeMeeting.title} · {activeMeeting.date}
-        </h2>
+        <h2 className="summary-card__title">{report.display_header}</h2>
         <p className="summary-card__ai-label">🤖 AI 요약</p>
-        <p className="summary-card__text">{activeMeeting.aiSummary}</p>
+        <p className="summary-card__text">{report.ai_summary}</p>
       </article>
 
       <article className="note-card">
@@ -209,15 +261,15 @@ function SummaryPage() {
         <div className="note-card__divider" />
 
         <h3 className="note-card__list-title">저장된 메모 목록</h3>
-        {activeNotes.length === 0 ? (
+        {report.memos.length === 0 ? (
           <p className="note-card__empty">아직 저장된 메모가 없어요. 위에 적고 저장을 눌러보세요</p>
         ) : (
           <ul className="note-list">
-            {activeNotes.map((note) => (
+            {report.memos.map((note) => (
               <li className="note-item" key={note.id}>
                 <div className="note-item__body">
-                  <p className="note-item__text">{note.text}</p>
-                  <span className="note-item__timestamp">🕒 {note.timestamp}</span>
+                  <p className="note-item__text">{note.content}</p>
+                  <span className="note-item__timestamp">🕒 {note.formatted_created_at}</span>
                 </div>
                 <button
                   className="note-item__delete"
@@ -238,24 +290,24 @@ function SummaryPage() {
           <span aria-hidden="true">✅</span> Action Items
         </h2>
         <ul className="action-list">
-          {activeMeeting.actionItems.map((item) => (
+          {report.action_items.map((item) => (
             <li className="action-item" key={item.id}>
               <label className="action-item__check">
                 <input
                   type="checkbox"
-                  checked={item.done}
-                  onChange={() => toggleActionItem(item.id)}
+                  checked={item.is_completed}
+                  onChange={() => toggleActionItem(item)}
                 />
                 <span className="action-item__box" aria-hidden="true">
-                  {item.done ? '✓' : ''}
+                  {item.is_completed ? '✓' : ''}
                 </span>
-                <span className={`action-item__label${item.done ? ' action-item__label--done' : ''}`}>
-                  {item.label}
+                <span className={`action-item__label${item.is_completed ? ' action-item__label--done' : ''}`}>
+                  {item.task}
                 </span>
               </label>
 
               <div className="action-item__meta">
-                {item.assignee ? (
+                {item.assignee && item.assignee !== '미지정' ? (
                   <button
                     className="action-tag action-tag--assignee"
                     type="button"
@@ -273,13 +325,13 @@ function SummaryPage() {
                   </button>
                 )}
 
-                {item.due ? (
+                {item.formatted_due_date ? (
                   <button
                     className="action-tag action-tag--due"
                     type="button"
                     onClick={() => setDueTarget(item.id)}
                   >
-                    {item.due}
+                    {item.formatted_due_date}
                   </button>
                 ) : (
                   <button
@@ -305,23 +357,22 @@ function SummaryPage() {
         </button>
       </div>
 
-{/* 담당자 지정 모달 */}
       {assigneeTarget && (
         <div className="summary-modal-overlay" onClick={() => { setAssigneeTarget(null); setCustomAssignee(''); }}>
           <div className="summary-modal summary-modal--assignee" onClick={(event) => event.stopPropagation()}>
             <h3 className="summary-modal__title">담당자 지정</h3>
-            
+
             <p className="summary-modal__subtitle">회의 참석자 중에서 선택</p>
             <ul className="member-list">
-              {teamMembers.map((member) => (
-                <li key={member.id}>
+              {report.participants.map((member) => (
+                <li key={member.name}>
                   <button
                     className="member-list__button"
                     type="button"
                     onClick={() => assignMember(assigneeTarget, member.name)}
                   >
                     {member.name}
-                    {member.name === '나' && <span className="host-badge">호스트</span>}
+                    {member.is_host && <span className="host-badge">호스트</span>}
                   </button>
                 </li>
               ))}
@@ -329,9 +380,9 @@ function SummaryPage() {
 
             <p className="summary-modal__subtitle">참석자 목록에 없다면 직접 추가</p>
             <div className="summary-modal__input-row">
-              <input 
-                type="text" 
-                placeholder="이름 입력" 
+              <input
+                type="text"
+                placeholder="이름 입력"
                 value={customAssignee}
                 onChange={(e) => setCustomAssignee(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && assignMember(assigneeTarget, customAssignee)}
@@ -342,12 +393,11 @@ function SummaryPage() {
         </div>
       )}
 
-      {/* 기한 지정 모달 */}
       {dueTarget && (
         <div className="summary-modal-overlay" onClick={() => setDueTarget(null)}>
           <div className="summary-modal summary-modal--due" onClick={(event) => event.stopPropagation()}>
             <h3 className="summary-modal__title">마감 기한 설정</h3>
-            
+
             <div className="preset-btn-group-row">
               <button type="button" className="preset-btn" onClick={() => handlePresetDue(dueTarget, 0)}>오늘</button>
               <button type="button" className="preset-btn" onClick={() => handlePresetDue(dueTarget, 1)}>내일</button>
@@ -360,8 +410,8 @@ function SummaryPage() {
                 id="due-date-input"
                 type="date"
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   const val = document.getElementById('due-date-input').value;
                   if (val) {

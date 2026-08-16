@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import dariLogo from '../../assets/img/logo/dari_logo.svg'
+import { login } from '../../api/auth'
 import './AuthPage.css'
 
 function LoginPage() {
+  const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', password: '' })
   const [errors, setErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleChange = (event) => {
     const { name, value } = event.target
@@ -14,7 +17,7 @@ function LoginPage() {
     setErrors((currentErrors) => ({ ...currentErrors, [name]: '' }))
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
     const nextErrors = {}
@@ -30,7 +33,18 @@ function LoginPage() {
     setErrors(nextErrors)
 
     if (Object.keys(nextErrors).length === 0) {
-      // API 명세 확정 후 로그인 요청을 연결합니다.
+      setIsSubmitting(true)
+      try {
+        await login({ username: form.username, password: form.password })
+        navigate('/')
+      } catch (error) {
+        setErrors({
+          password:
+            error.response?.data?.detail || '아이디 또는 비밀번호가 올바르지 않습니다.',
+        })
+      } finally {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -86,8 +100,8 @@ function LoginPage() {
               )}
             </div>
 
-            <button className="auth-form__submit" type="submit">
-              로그인
+            <button className="auth-form__submit" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? '로그인 중...' : '로그인'}
             </button>
           </form>
 

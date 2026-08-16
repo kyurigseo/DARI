@@ -1,32 +1,57 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getMyPage, updateMyPage, updateSettings, logout } from '../../api/auth'
 import './MyPage.css'
 
 const AVATAR_COLORS = ['#FF9351', '#8454F6', '#20AD7A', '#4C5FD5']
 
-const initialProfile = {
-  name: '김지민',
-  role: 'PM · Acme팀',
-  email: 'jimin@dari.io',
-  avatarColor: AVATAR_COLORS[0],
-}
-
-const stats = [
-  { id: 'cards', label: '저장한 발언카드', value: 2 },
-  { id: 'rehearsals', label: '완료한 리허설', value: 12 },
-  { id: 'meetings', label: '참여한 회의', value: 8 },
-]
-
 function MyPage() {
-  const [profile, setProfile] = useState(initialProfile)
+  const navigate = useNavigate()
+  const [profile, setProfile] = useState(null)
+  const [stats, setStats] = useState(null)
   const [notifyEnabled, setNotifyEnabled] = useState(true)
-  const [translateLang] = useState('한국어')
+  const [translateLang, setTranslateLang] = useState('한국어')
+  const [isLoading, setIsLoading] = useState(true)
 
-  // 정보 수정 모달 상태
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [draft, setDraft] = useState(initialProfile)
+  const [draft, setDraft] = useState(null)
   const [toast, setToast] = useState(null)
 
   const toastTimerRef = useRef(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    getMyPage()
+      .then((data) => {
+        if (!isMounted) return
+        setProfile({
+          name: data.name,
+          role: data.position_team || '',
+          email: data.email,
+          avatarColor: AVATAR_COLORS[0],
+          profileImage: data.profile_image,
+        })
+        setStats([
+          { id: 'cards', label: '저장한 발언카드', value: data.stats.saved_speech_cards_count },
+          { id: 'rehearsals', label: '완료한 리허설', value: data.stats.completed_rehearsals_count },
+          { id: 'meetings', label: '참여한 회의', value: data.stats.joined_meetings_count },
+        ])
+        setNotifyEnabled(data.settings.notification_enabled)
+        setTranslateLang(data.settings.preferred_language)
+      })
+      .catch(() => {
+        if (isMounted) showToast('내 정보를 불러오지 못했어요.')
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const showToast = (message) => {
     clearTimeout(toastTimerRef.current)
@@ -54,25 +79,54 @@ function MyPage() {
     })
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!draft.name.trim() || !draft.email.trim()) return
 
-    setProfile({
-      ...draft,
-      name: draft.name.trim(),
-      role: draft.role.trim(),
-      email: draft.email.trim(),
-    })
-    showToast('내 정보가 수정되었어요 ✅')
-    setIsEditOpen(false)
+    try {
+      const response = await updateMyPage({
+        name: draft.name.trim(),
+        email: draft.email.trim(),
+        position_team: draft.role.trim(),
+      })
+      setProfile((prev) => ({
+        ...prev,
+        name: response.data.name,
+        role: response.data.position_team || '',
+        email: response.data.email,
+        avatarColor: draft.avatarColor,
+      }))
+      showToast('내 정보가 수정되었어요 ✅')
+      setIsEditOpen(false)
+    } catch {
+      showToast('수정에 실패했어요. 다시 시도해주세요.')
+    }
   }
 
-  const handleToggleNotify = () => {
-    setNotifyEnabled((prev) => !prev)
+  const handleToggleNotify = async () => {
+    const next = !notifyEnabled
+    setNotifyEnabled(next)
+    try {
+      await updateSettings({ notification_enabled: next })
+    } catch {
+      setNotifyEnabled(!next)
+      showToast('설정 변경에 실패했어요.')
+    }
   }
 
-  const handleLogout = () => {
-    showToast('로그아웃 되었어요 👋')
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } finally {
+      navigate('/login')
+    }
+  }
+
+  if (isLoading || !profile) {
+    return (
+      <section className="mypage">
+        <p>불러오는 중...</p>
+      </section>
+    )
   }
 
   return (
@@ -136,7 +190,6 @@ function MyPage() {
         로그아웃
       </button>
 
-      {/* 내 정보 수정 모달 */}
       {isEditOpen && (
         <div className="mypage-modal-overlay" onClick={closeEditModal}>
           <div className="mypage-modal" onClick={(event) => event.stopPropagation()}>

@@ -1,35 +1,105 @@
 import { useEffect, useRef, useState } from 'react'
+import { getMe } from '../../api/auth'
 import {
-  availabilityStatusLabels,
-  initialAvailability,
-  localTimes,
-  recentParticipants,
-  timeLabels,
-} from './trackerMockData'
+  getLatestAlert,
+  getParticipationSummary,
+  getHeatmap,
+  updateMyHeatmapSlot,
+  getRecommendation,
+  confirmMeeting as confirmMeetingApi,
+} from '../../api/tracker'
 import './TrackerPage.css'
 
 const statusOrder = ['comfortable', 'normal', 'uncomfortable']
+const timeLabels = Array.from({ length: 12 }, (_, index) => `${String(index * 2).padStart(2, '0')}:00`)
+const todayWeekday = (new Date().getUTCDay() + 6) % 7 // JS: 0=일요일 -> 0=월요일 변환 (UTC 기준)
+
+function statusFromBackend(value) {
+  if (value === 'comfortable') return 'comfortable'
+  if (value === 'uncomfortable') return 'uncomfortable'
+  if (value === 'neutral') return 'normal'
+  return 'normal'
+}
+
+function statusToBackend(value) {
+  if (value === 'normal') return 'neutral'
+  return value
+}
 
 function TrackerPage() {
   const [finderExpanded, setFinderExpanded] = useState(false)
-  const [availability, setAvailability] = useState(initialAvailability)
-  const [selectedRecommendedTime] = useState('13:00')
+  const [me, setMe] = useState(null)
+  const [alert, setAlert] = useState(null)
+  const [participation, setParticipation] = useState(null)
+  const [myRow, setMyRow] = useState(() => Array(48).fill('normal'))
+  const [recommendation, setRecommendation] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState('시차 조율 회의')
   const [confirmed, setConfirmed] = useState(false)
   const [toast, setToast] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
   const toastTimerRef = useRef(null)
 
-  const cycleMyAvailability = (cellIndex) => {
-    setAvailability((currentAvailability) => {
-      const currentStatus = currentAvailability.me[cellIndex]
-      const nextStatus = statusOrder[(statusOrder.indexOf(currentStatus) + 1) % statusOrder.length]
+  useEffect(() => {
+    let isMounted = true
 
-      return {
-        ...currentAvailability,
-        me: currentAvailability.me.map((status, index) => (index === cellIndex ? nextStatus : status)),
+    async function load() {
+      try {
+        const user = await getMe()
+        if (!isMounted) return
+        setMe(user)
+
+        const [alertData, participationData, heatmapData, recommendationData] = await Promise.all([
+          getLatestAlert(),
+          getParticipationSummary([user.id]),
+          getHeatmap([user.id]),
+          getRecommendation([user.id]),
+        ])
+
+        if (!isMounted) return
+        setAlert(alertData)
+        setParticipation(participationData.results?.[0] ?? null)
+        setRecommendation(recommendationData.recommendation)
+
+        const myHeatmapRow = heatmapData.results?.find((row) => row.user_id === user.id)
+        if (myHeatmapRow) {
+          const row = Array(48).fill('normal')
+          for (const slot of myHeatmapRow.slots) {
+            if (slot.weekday === todayWeekday) {
+              row[slot.half_hour_index] = statusFromBackend(slot.status)
+            }
+          }
+          setMyRow(row)
+        }
+      } catch {
+        // 개별 위젯 실패는 화면 전체를 막지 않고 해당 섹션만 빈 상태로 둔다.
+      } finally {
+        if (isMounted) setIsLoading(false)
       }
-    })
+    }
+
+    load()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const cycleMyAvailability = async (cellIndex) => {
+    const currentStatus = myRow[cellIndex]
+    const nextStatus = statusOrder[(statusOrder.indexOf(currentStatus) + 1) % statusOrder.length]
+
+    setMyRow((current) => current.map((status, index) => (index === cellIndex ? nextStatus : status)))
+
+    try {
+      await updateMyHeatmapSlot({
+        weekday: todayWeekday,
+        halfHourIndex: cellIndex,
+        status: statusToBackend(nextStatus),
+      })
+    } catch {
+      setMyRow((current) => current.map((status, index) => (index === cellIndex ? currentStatus : status)))
+      showToast('시간대 변경에 실패했어요.')
+    }
   }
 
   const showToast = (message) => {
@@ -42,13 +112,23 @@ function TrackerPage() {
     toastTimerRef.current = setTimeout(() => setToast(''), 2500)
   }
 
-  const confirmMeeting = () => {
-    setConfirmed(true)
-    setModalOpen(false)
-    showToast('13:00 회의를 확정하고 홈에 추가했어요 ✅')
+  const confirmMeeting = async () => {
+    if (!me || !recommendation) return
 
-    // TODO: 일정 확정 API가 준비되면 회의 제목과 추천 시간을 서버에 저장합니다.
-    // TODO: 공통 일정 상태가 마련되면 Header의 다음 회의 정보도 갱신합니다.
+    try {
+      await confirmMeetingApi({
+        title: meetingTitle,
+        weekday: recommendation.weekday,
+        halfHourIndex: recommendation.half_hour_index,
+        participantIds: [me.id],
+      })
+      setConfirmed(true)
+      setModalOpen(false)
+      showToast(`${recommendation.start_time_kst} 회의를 확정하고 홈에 추가했어요 ✅`)
+    } catch {
+      setModalOpen(false)
+      showToast('일정 확정에 실패했어요. 다시 시도해주세요.')
+    }
   }
 
   useEffect(() => {
@@ -76,6 +156,14 @@ function TrackerPage() {
     [],
   )
 
+  if (isLoading) {
+    return (
+      <section className="tracker-page">
+        <p>불러오는 중...</p>
+      </section>
+    )
+  }
+
   return (
     <section className="tracker-page">
       <header className="tracker-page__heading">
@@ -83,25 +171,33 @@ function TrackerPage() {
         <p>참여 시간대 기록을 보고, 모두에게 공정한 회의 시간을 함께 찾아보세요</p>
       </header>
 
-      <section className="participation-card" aria-labelledby="participation-title">
-        <h2 id="participation-title">최근 6회 참여 시간대</h2>
-        <div className="participation-card__list">
-          {recentParticipants.map((participant) => (
-            <div className={`participation-row participation-row--${participant.tone}`} key={participant.name}>
-              <span className="participation-row__avatar">{participant.name}</span>
-              <div className="participation-row__track" aria-hidden="true">
-                <span style={{ width: `${participant.percent}%` }} />
-              </div>
-              <span className="participation-row__badge">{participant.badge}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+      {participation && participation.total_records > 0 && (
+        <section className="participation-card" aria-labelledby="participation-title">
+          <h2 id="participation-title">최근 {participation.window}회 참여 시간대</h2>
+          <div className="participation-card__list">
+            {Object.entries(participation.buckets)
+              .filter(([, bucket]) => bucket.count > 0)
+              .map(([key, bucket]) => (
+                <div className="participation-row" key={key}>
+                  <span className="participation-row__avatar">{participation.username}</span>
+                  <div className="participation-row__track" aria-hidden="true">
+                    <span style={{ width: `${Math.round(bucket.ratio * 100)}%` }} />
+                  </div>
+                  <span className="participation-row__badge">
+                    {bucket.label} {bucket.count}/{participation.total_records}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </section>
+      )}
 
-      <div className="tracker-warning">
-        <span aria-hidden="true">⚠️</span>
-        <span>지민님이 이번 달 6번 중 5번, 새벽 시간대(03~06시)에 참여했어요.</span>
-      </div>
+      {alert?.has_alert && (
+        <div className="tracker-warning">
+          <span aria-hidden="true">⚠️</span>
+          <span>{alert.message}</span>
+        </div>
+      )}
 
       <section className={`time-finder${finderExpanded ? ' time-finder--expanded' : ''}`}>
         <header className="time-finder__header">
@@ -134,67 +230,61 @@ function TrackerPage() {
                   ))}
                 </div>
 
-                {Object.entries(availability).map(([participantId, statuses]) => (
-                  <div
-                    className={`availability-row${participantId === 'me' ? ' availability-row--me' : ''}`}
-                    key={participantId}
-                  >
-                    <strong>{localTimes.find((person) => person.id === participantId).name}</strong>
-                    <div className="availability-row__cells">
-                      {statuses.map((status, index) => {
-                        const time = `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 ? '30' : '00'}`
+                <div className="availability-row availability-row--me">
+                  <strong>나</strong>
+                  <div className="availability-row__cells">
+                    {myRow.map((status, index) => {
+                      const time = `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 ? '30' : '00'}`
 
-                        return participantId === 'me' ? (
-                          <button
-                            className={`availability-cell availability-cell--${status}`}
-                            type="button"
-                            aria-label={`나 ${time}, ${availabilityStatusLabels[status]}. 클릭해서 변경`}
-                            onClick={() => cycleMyAvailability(index)}
-                            key={time}
-                          />
-                        ) : (
-                          <span
-                            className={`availability-cell availability-cell--${status}`}
-                            title={`${time} ${availabilityStatusLabels[status]}`}
-                            key={time}
-                          />
-                        )
-                      })}
+                      return (
+                        <button
+                          className={`availability-cell availability-cell--${status}`}
+                          type="button"
+                          aria-label={`나 ${time}, ${status}. 클릭해서 변경`}
+                          onClick={() => cycleMyAvailability(index)}
+                          key={time}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {recommendation && (
+              <div className="recommendation-panel">
+                <h3>
+                  {confirmed ? '🔒 확정된 회의 시간' : '🏆 추천 시간대'} — {recommendation.start_time_kst}
+                </h3>
+                {recommendation.has_uncomfortable_participants && (
+                  <p className="recommendation-panel__warning">🔴 일부 참석자에게 불편한 시간이에요</p>
+                )}
+                <div className="recommendation-panel__people">
+                  {recommendation.participants.map((person) => (
+                    <div key={person.user_id}>
+                      <span>
+                        <strong>{person.username}</strong> · 현지 {person.local_time}
+                      </span>
+                      <span className={`recommendation-status recommendation-status--${person.status}`}>
+                        ● {person.status === 'comfortable' ? '✅ 편한 시간' : '🔴 불편한 시간'}
+                      </span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <button
+                  className={`recommendation-panel__button${confirmed ? ' recommendation-panel__button--adjust' : ''}`}
+                  type="button"
+                  onClick={() => (confirmed ? setConfirmed(false) : setModalOpen(true))}
+                >
+                  {confirmed ? '다시 조정하기' : '이 시간으로 일정 확정하기'}
+                </button>
               </div>
-            </div>
-
-            <div className="recommendation-panel">
-              <h3>
-                {confirmed ? '🔒 확정된 회의 시간' : '🏆 추천 시간대'} — {selectedRecommendedTime} (KST)
-              </h3>
-              <p className="recommendation-panel__warning">🔴 일부 참석자에게 불편한 시간이에요</p>
-              <div className="recommendation-panel__people">
-                {localTimes.map((person) => (
-                  <div key={person.id}>
-                    <span><strong>{person.name}</strong> · 현지 {person.time}</span>
-                    <span className={`recommendation-status recommendation-status--${person.status}`}>
-                      ● {person.status === 'comfortable' ? '✅ 편한 시간' : '🔴 불편한 시간'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <button
-                className={`recommendation-panel__button${confirmed ? ' recommendation-panel__button--adjust' : ''}`}
-                type="button"
-                onClick={() => (confirmed ? setConfirmed(false) : setModalOpen(true))}
-              >
-                {confirmed ? '다시 조정하기' : '이 시간으로 일정 확정하기'}
-              </button>
-              {/* TODO: 공통 회의 시간 추천 API가 준비되면 13:00 Mock 결과를 교체합니다. */}
-            </div>
+            )}
           </div>
         )}
       </section>
 
-      {modalOpen && (
+      {modalOpen && recommendation && (
         <div className="tracker-modal-backdrop" onMouseDown={() => setModalOpen(false)}>
           <section
             className="tracker-modal"
@@ -204,7 +294,7 @@ function TrackerPage() {
             onMouseDown={(event) => event.stopPropagation()}
           >
             <h2 id="tracker-modal-title">회의 일정 확정</h2>
-            <p>{selectedRecommendedTime} (KST)에 회의를 확정하고 홈 화면 일정에 추가할게요</p>
+            <p>{recommendation.start_time_kst}에 회의를 확정하고 홈 화면 일정에 추가할게요</p>
             <label htmlFor="meeting-title">회의 제목</label>
             <input
               id="meeting-title"
@@ -212,10 +302,14 @@ function TrackerPage() {
               onChange={(event) => setMeetingTitle(event.target.value)}
             />
             <div className="tracker-modal__summary">
-              <strong>🔴 일부 참석자에게 불편한 시간이에요</strong>
-              {localTimes.map((person) => (
-                <div key={person.id}>
-                  <span><b>{person.name}</b> · 현지 {person.time}</span>
+              {recommendation.has_uncomfortable_participants && (
+                <strong>🔴 일부 참석자에게 불편한 시간이에요</strong>
+              )}
+              {recommendation.participants.map((person) => (
+                <div key={person.user_id}>
+                  <span>
+                    <b>{person.username}</b> · 현지 {person.local_time}
+                  </span>
                   <span className={`recommendation-status recommendation-status--${person.status}`}>
                     ● {person.status === 'comfortable' ? '✅ 편한 시간' : '🔴 불편한 시간'}
                   </span>

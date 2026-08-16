@@ -1,31 +1,57 @@
 import { useEffect, useRef, useState } from 'react'
 import koreanFlag from '../../assets/img/flags/kr.svg'
-import { answerExamples, personas } from './rehearsalMockData'
+import { getPersonas, startSession, sendMessage, saveFeedbackAsCard } from '../../api/rehearsal'
+import { getLanguageMeta } from '../cards/languageMeta'
 import './RehearsalPage.css'
 
-const createInitialMessages = (persona) => [
-  { id: `${persona.id}-initial`, sender: 'ai', text: persona.initialMessage },
-]
+function personaFlag(persona) {
+  return getLanguageMeta(persona.culture_tag).flag
+}
 
 function RehearsalPage() {
-  const [selectedPersona, setSelectedPersona] = useState(personas[0].id)
+  const [personas, setPersonas] = useState([])
+  const [selectedPersonaId, setSelectedPersonaId] = useState(null)
+  const [sessionId, setSessionId] = useState(null)
   const [inputValue, setInputValue] = useState('')
-  const [messages, setMessages] = useState(() => createInitialMessages(personas[0]))
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [messages, setMessages] = useState([])
+  const [pendingFeedback, setPendingFeedback] = useState(null) // { afterMessageId, feedback }
+  const [savedFeedbackIds, setSavedFeedbackIds] = useState(new Set())
   const [toast, setToast] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSending, setIsSending] = useState(false)
   const chatLogRef = useRef(null)
   const toastTimerRef = useRef(null)
 
-  const activePersona = personas.find((persona) => persona.id === selectedPersona)
+  const activePersona = personas.find((persona) => persona.persona_id === selectedPersonaId)
+
+  useEffect(() => {
+    let isMounted = true
+
+    getPersonas()
+      .then((data) => {
+        if (!isMounted) return
+        setPersonas(data)
+        if (data.length > 0) {
+          handlePersonaChange(data[0])
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setIsLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const chatLog = chatLogRef.current
-
     if (chatLog) {
       chatLog.scrollTop = chatLog.scrollHeight
     }
-  }, [messages, showFeedback])
+  }, [messages, pendingFeedback])
 
   useEffect(
     () => () => {
@@ -36,45 +62,53 @@ function RehearsalPage() {
     [],
   )
 
-  const handlePersonaChange = (persona) => {
-    setSelectedPersona(persona.id)
+  const handlePersonaChange = async (persona) => {
+    setSelectedPersonaId(persona.persona_id)
     setInputValue('')
-    setMessages(createInitialMessages(persona))
-    setShowFeedback(false)
-    setSaved(false)
+    setMessages([])
+    setPendingFeedback(null)
+    setSessionId(null)
     setToast(false)
 
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current)
     }
+
+    try {
+      const data = await startSession({ personaId: persona.persona_id, context: '' })
+      setSessionId(data.session_id)
+      setMessages([{ id: 'opening', sender: 'ai', text: data.opening_message }])
+    } catch {
+      setMessages([{ id: 'error', sender: 'ai', text: '세션을 시작하지 못했어요. 잠시 후 다시 시도해주세요.' }])
+    }
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
-    const message = inputValue.trim()
+    const text = inputValue.trim()
+    if (!text || !sessionId || isSending) return
 
-    if (!message) return
-
-    const isFirstReply = !showFeedback
-    const nextMessages = [
-      ...messages,
-      { id: `user-${Date.now()}`, sender: 'user', text: message },
-    ]
-
-    if (isFirstReply) {
-      nextMessages.push({
-        id: `ai-follow-up-${Date.now()}`,
-        sender: 'ai',
-        text: activePersona.followUpMessage,
-      })
-    }
-
-    setMessages(nextMessages)
-    setShowFeedback(isFirstReply || showFeedback)
+    const userMessage = { id: `user-${Date.now()}`, sender: 'user', text }
+    setMessages((current) => [...current, userMessage])
     setInputValue('')
+    setIsSending(true)
 
-    // TODO: AI API 명세 확정 후 Mock 응답을 실제 대화 응답으로 교체합니다.
+    try {
+      const data = await sendMessage(sessionId, text)
+      setMessages((current) => [
+        ...current,
+        { id: data.ai_message.id, sender: 'ai', text: data.ai_message.content },
+      ])
+      setPendingFeedback({ afterMessageId: userMessage.id, feedback: data.feedback })
+    } catch {
+      setMessages((current) => [
+        ...current,
+        { id: `error-${Date.now()}`, sender: 'ai', text: '응답을 받지 못했어요. 다시 시도해주세요.' },
+      ])
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const handleKeyDown = (event) => {
@@ -84,21 +118,29 @@ function RehearsalPage() {
     }
   }
 
-  const handleSaveCard = () => {
-    if (saved) return
+  const handleSaveCard = async (feedbackId) => {
+    if (savedFeedbackIds.has(feedbackId)) return
 
-    setSaved(true)
-    setToast(true)
+    try {
+      await saveFeedbackAsCard(feedbackId, '')
+      setSavedFeedbackIds((current) => new Set(current).add(feedbackId))
+      setToast(true)
 
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current)
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current)
+      }
+      toastTimerRef.current = setTimeout(() => setToast(false), 2500)
+    } catch {
+      // 저장 실패 시 토스트를 띄우지 않고 버튼을 다시 활성 상태로 둔다.
     }
+  }
 
-    toastTimerRef.current = setTimeout(() => {
-      setToast(false)
-    }, 2500)
-
-    // TODO: 카드 저장 API 명세 확정 후 서버 저장 로직을 연결합니다.
+  if (isLoading) {
+    return (
+      <section className="rehearsal-page">
+        <p>불러오는 중...</p>
+      </section>
+    )
   }
 
   return (
@@ -110,7 +152,7 @@ function RehearsalPage() {
 
       <div className="persona-list" role="group" aria-label="대화 상대 선택">
         {personas.map((persona) => {
-          const isActive = persona.id === selectedPersona
+          const isActive = persona.persona_id === selectedPersonaId
 
           return (
             <button
@@ -118,10 +160,10 @@ function RehearsalPage() {
               type="button"
               aria-pressed={isActive}
               onClick={() => handlePersonaChange(persona)}
-              key={persona.id}
+              key={persona.persona_id}
             >
-              <img className="persona-button__flag" src={persona.flag} alt="" />
-              {persona.label}
+              <img className="persona-button__flag" src={personaFlag(persona)} alt="" />
+              {persona.name}
             </button>
           )
         })}
@@ -129,12 +171,12 @@ function RehearsalPage() {
 
       <div className="rehearsal-chat">
         <div className="rehearsal-chat__log" ref={chatLogRef} aria-live="polite">
-          {messages.map((message, index) => (
+          {messages.map((message) => (
             <div key={message.id}>
               <div className={`chat-message chat-message--${message.sender}`}>
-                {message.sender === 'ai' && (
+                {message.sender === 'ai' && activePersona && (
                   <span className="chat-avatar chat-avatar--ai">
-                    <img src={activePersona.flag} alt={`${activePersona.label} 국기`} />
+                    <img src={personaFlag(activePersona)} alt={`${activePersona.name} 국기`} />
                   </span>
                 )}
                 <p className="chat-message__bubble">{message.text}</p>
@@ -145,43 +187,39 @@ function RehearsalPage() {
                 )}
               </div>
 
-              {message.sender === 'user' && showFeedback && index === 1 && (
-                <article className="coach-feedback">
-                  <h2>💡 AI 코치 피드백</h2>
-                  <p className="coach-feedback__situation">상황 · 일정 지연 사유를 설명해야 할 때</p>
-                  <p className="coach-feedback__tip">
-                    더 직설적으로 바꿔볼까요? 원인 → 대안 순으로 짧게 말해보세요.
-                  </p>
-                  <p className="coach-feedback__recommendation">
-                    <img src={koreanFlag} alt="대한민국 국기" />
-                    <span>일정 지연 원인은 A이고, 대안으로 B를 제안드립니다.</span>
-                  </p>
-                  <p className="coach-feedback__translation">
-                    Deutsch · Die Verzögerung liegt an A, als Alternative schlage ich B vor.
-                  </p>
-                  <button
-                    className={`coach-feedback__save${saved ? ' coach-feedback__save--saved' : ''}`}
-                    type="button"
-                    onClick={handleSaveCard}
-                    disabled={saved}
-                  >
-                    {saved ? '✓ 카드로 저장됨' : '🗂️ 카드로 저장'}
-                  </button>
-                </article>
-              )}
+              {message.sender === 'user' &&
+                pendingFeedback &&
+                pendingFeedback.afterMessageId === message.id && (
+                  <article className="coach-feedback">
+                    <h2>💡 AI 코치 피드백</h2>
+                    <p className="coach-feedback__situation">상황 · {pendingFeedback.feedback.situation_label}</p>
+                    <p className="coach-feedback__tip">{pendingFeedback.feedback.explanation}</p>
+                    <p className="coach-feedback__recommendation">
+                      <img src={koreanFlag} alt="대한민국 국기" />
+                      <span>{pendingFeedback.feedback.suggested_text}</span>
+                    </p>
+                    <p className="coach-feedback__translation">
+                      {getLanguageMeta(pendingFeedback.feedback.translated_language).name} ·{' '}
+                      {pendingFeedback.feedback.translated_text}
+                    </p>
+                    <button
+                      className={`coach-feedback__save${
+                        savedFeedbackIds.has(pendingFeedback.feedback.feedback_id)
+                          ? ' coach-feedback__save--saved'
+                          : ''
+                      }`}
+                      type="button"
+                      onClick={() => handleSaveCard(pendingFeedback.feedback.feedback_id)}
+                      disabled={savedFeedbackIds.has(pendingFeedback.feedback.feedback_id)}
+                    >
+                      {savedFeedbackIds.has(pendingFeedback.feedback.feedback_id)
+                        ? '✓ 카드로 저장됨'
+                        : '🗂️ 카드로 저장'}
+                    </button>
+                  </article>
+                )}
             </div>
           ))}
-        </div>
-
-        <div className="answer-examples">
-          <p>💡 AI 답변 예시 — 눌러서 입력창에 채워보세요</p>
-          <div className="answer-examples__list">
-            {answerExamples.map((example) => (
-              <button type="button" onClick={() => setInputValue(example)} key={example}>
-                {example}
-              </button>
-            ))}
-          </div>
         </div>
 
         <form className="rehearsal-composer" onSubmit={handleSubmit}>
@@ -192,8 +230,11 @@ function RehearsalPage() {
             onChange={(event) => setInputValue(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="답변을 입력해보세요"
+            disabled={isSending}
           />
-          <button type="submit">전송</button>
+          <button type="submit" disabled={isSending}>
+            {isSending ? '전송 중...' : '전송'}
+          </button>
         </form>
       </div>
 

@@ -1,6 +1,8 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
 import threading
 import urllib.parse
+from django.db import models
+from django.conf import settings
 from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,6 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
 from .utils import generate_media_server_token
 from .services import MeetingSummaryPipeline, MeetingShareFormatter
@@ -64,7 +68,13 @@ class PrejoinView(APIView):
 class MediaTokenView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request, room_code):
+        return self._issue_token(request, room_code)
+
     def post(self, request, room_code):
+        return self._issue_token(request, room_code)
+
+    def _issue_token(self, request, room_code):
         meeting = get_object_or_404(MeetingSession, room_code=room_code)
         token = generate_media_server_token(
             room_code=meeting.room_code,
@@ -127,6 +137,19 @@ class KickParticipantView(APIView):
         if participant:
             participant.is_active = False
             participant.save()
+
+            # 실시간으로 연결되어 있는 대상 참가자의 WebSocket에 강퇴 신호를 보내
+            # 클라이언트가 즉시 통화를 종료하도록 한다.
+            channel_layer = get_channel_layer()
+            if channel_layer is not None:
+                async_to_sync(channel_layer.group_send)(
+                    f'meeting_{room_code}',
+                    {
+                        'type': 'kicked',
+                        'user_id': target_user_id,
+                    }
+                )
+
             return Response({'message': '참가자를 회의에서 내보냈습니다.'}, status=status.HTTP_200_OK)
 
         return Response({'error': '해당 참가자를 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)

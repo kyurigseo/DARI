@@ -1,16 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  captionScript,
-  initialChatMessages,
-  initialParticipants,
-  speechCards,
-  translationLanguages,
-  waitingList,
-} from './meetingMockData'
+import { useParams } from 'react-router-dom'
+import { getSpeechCards } from '../../api/meetings'
+import { useMeetingRoom } from './useMeetingRoom'
+import germanFlag from '../../assets/img/flags/de.svg'
+import japaneseFlag from '../../assets/img/flags/jp.svg'
+import koreanFlag from '../../assets/img/flags/kr.svg'
+import chineseFlag from '../../assets/img/flags/cn.svg'
+import usFlag from '../../assets/img/flags/us.svg'
 import './MeetingPage.css'
-
-const MEETING_TITLE = 'Acme Corp 협상'
-const AVATAR_COLORS = ['#8454f6', '#e0546b', '#12b8a6', '#ff9351', '#4f8cff']
 
 const TABS = [
   { id: 'subtitle', label: '자막·번역' },
@@ -18,6 +15,21 @@ const TABS = [
   { id: 'participants', label: '참가자' },
   { id: 'chat', label: '채팅' },
 ]
+
+// 프론트 언어 선택지 <-> 백엔드(DeepL 등) 언어 코드 매핑
+const LANGUAGE_OPTIONS = [
+  { label: '한국어', code: 'KO', flag: koreanFlag },
+  { label: 'English', code: 'EN-US', flag: usFlag },
+  { label: '日本語', code: 'JA', flag: japaneseFlag },
+  { label: '中文', code: 'ZH', flag: chineseFlag },
+  { label: 'Deutsch', code: 'DE', flag: germanFlag },
+]
+
+const LANG_META_BY_CODE = LANGUAGE_OPTIONS.reduce((acc, item) => {
+  acc[item.code] = item
+  acc[item.code.split('-')[0]] = item
+  return acc
+}, {})
 
 const formatElapsed = (totalSeconds) => {
   const minutes = Math.floor(totalSeconds / 60)
@@ -27,38 +39,99 @@ const formatElapsed = (totalSeconds) => {
   return `${minutes}:${seconds}`
 }
 
+function VideoTile({ participant }) {
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    if (videoRef.current && participant.stream) {
+      videoRef.current.srcObject = participant.stream
+    }
+  }, [participant.stream])
+
+  const showVideo = participant.cameraOn && participant.stream
+
+  return (
+    <div className={`video-tile${participant.speaking ? ' video-tile--speaking' : ''}`}>
+      {showVideo && (
+        <video
+          ref={videoRef}
+          className="video-tile__video"
+          autoPlay
+          playsInline
+          muted={participant.isMe}
+        />
+      )}
+      {!showVideo && (
+        <span className="video-tile__avatar" style={{ background: participant.color }}>
+          {participant.isMe ? '나' : participant.name?.slice(0, 1)}
+        </span>
+      )}
+      <span className="video-tile__footer">
+        <span className="video-tile__name">{participant.isMe ? '나' : participant.name}</span>
+        {participant.speaking ? (
+          <span className="video-tile__speaking">🎙️ 말하는 중</span>
+        ) : (
+          <span className={`video-tile__icon${participant.micOn ? '' : ' is-muted'}`}>
+            {participant.micOn ? '🔊' : '🔇'}
+          </span>
+        )}
+        {!participant.cameraOn && <span className="video-tile__icon">🚫</span>}
+      </span>
+    </div>
+  )
+}
+
 function MeetingPage() {
-  const [joined, setJoined] = useState(false)
-  const [micOn, setMicOn] = useState(false)
-  const [cameraOn, setCameraOn] = useState(false)
-  const [participants, setParticipants] = useState(initialParticipants)
+  const { meetingId: roomCode } = useParams()
+
+  const {
+    me,
+    meetingInfo,
+    prejoinError,
+    joined,
+    connecting,
+    micOn,
+    cameraOn,
+    participants,
+    captions,
+    chatMessages,
+    toast,
+    join,
+    leave,
+    toggleMic,
+    toggleCamera,
+    sendChat,
+    invite,
+    kick,
+    endMeeting,
+  } = useMeetingRoom(roomCode)
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [activeTab, setActiveTab] = useState('subtitle')
   const [selectedLang, setSelectedLang] = useState('한국어')
   const [liveSubtitles, setLiveSubtitles] = useState(true)
-  const [captionIndex, setCaptionIndex] = useState(0)
-  const [chatMessages, setChatMessages] = useState(initialChatMessages)
   const [chatDraft, setChatDraft] = useState('')
   const [inviteName, setInviteName] = useState('')
-  const [toast, setToast] = useState('')
+  const [speechCards, setSpeechCards] = useState([])
 
-  const toastTimerRef = useRef(null)
   const chatLogRef = useRef(null)
 
+  const meetingTitle = meetingInfo?.title || (roomCode ? `회의 ${roomCode}` : '회의')
+
   useEffect(() => {
-    if (!joined) return undefined
-
-    const timer = setInterval(() => setElapsedSeconds((prev) => prev + 1), 1000)
-    const captionTimer = setInterval(
-      () => setCaptionIndex((prev) => (prev + 1) % captionScript.length),
-      6000,
-    )
-
-    return () => {
-      clearInterval(timer)
-      clearInterval(captionTimer)
+    if (!joined) {
+      setElapsedSeconds(0)
+      return undefined
     }
+    const timer = setInterval(() => setElapsedSeconds((prev) => prev + 1), 1000)
+    return () => clearInterval(timer)
   }, [joined])
+
+  useEffect(() => {
+    getSpeechCards()
+      .then(setSpeechCards)
+      .catch(() => setSpeechCards([]))
+  }, [])
 
   useEffect(() => {
     if (chatLogRef.current) {
@@ -66,104 +139,46 @@ function MeetingPage() {
     }
   }, [chatMessages])
 
-  useEffect(
-    () => () => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current)
-      }
-    },
-    [],
-  )
-
-  const showToast = (message) => {
-    setToast(message)
-
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current)
-    }
-
-    toastTimerRef.current = setTimeout(() => setToast(''), 2500)
+  const handleSendMessage = (event) => {
+    event.preventDefault()
+    const trimmed = chatDraft.trim()
+    if (!trimmed) return
+    sendChat(trimmed)
+    setChatDraft('')
   }
 
-  const handleJoin = () => {
-    setJoined(true)
-    setElapsedSeconds(0)
-    setCaptionIndex(0)
-    setActiveTab('subtitle')
-    setParticipants((prev) => prev.map((p) => (p.isMe ? { ...p, micOn, cameraOn } : p)))
-    showToast('회의에 참가했어요 🎉')
-
-    // TODO: 실제 미디어 연결(WebRTC) API 명세 확정 후 스트림 연결 로직을 추가합니다.
-  }
-
-  const handleLeave = () => {
-    setJoined(false)
-    setElapsedSeconds(0)
-  }
-
-  const handleToggleMic = () => {
-    const next = !micOn
-    setMicOn(next)
-    setParticipants((prev) => prev.map((p) => (p.isMe ? { ...p, micOn: next } : p)))
-  }
-
-  const handleToggleCamera = () => {
-    const next = !cameraOn
-    setCameraOn(next)
-    setParticipants((prev) => prev.map((p) => (p.isMe ? { ...p, cameraOn: next } : p)))
-  }
-
-  const handleRemoveParticipant = (participantId) => {
-    const target = participants.find((p) => p.id === participantId)
-    setParticipants((prev) => prev.filter((p) => p.id !== participantId))
-    if (target) showToast(`${target.name}님을 내보냈어요`)
+  const handlePasteToChat = (card) => {
+    setChatDraft(card.korean_script)
+    setActiveTab('chat')
   }
 
   const handleInvite = () => {
     const trimmed = inviteName.trim()
     if (!trimmed) return
-
-    setParticipants((prev) => [
-      ...prev,
-      {
-        id: `guest-${Date.now()}`,
-        name: trimmed,
-        tzIcon: '🌐',
-        localTime: '--:--',
-        color: AVATAR_COLORS[participants.length % AVATAR_COLORS.length],
-        micOn: false,
-        cameraOn: false,
-        speaking: false,
-      },
-    ])
+    invite(trimmed)
     setInviteName('')
-    showToast(`${trimmed}님을 초대했어요`)
-
-    // TODO: 초대 API 명세 확정 후 실제 초대 로직으로 교체합니다.
   }
 
-  const handlePasteToChat = (card) => {
-    setChatDraft(card.korean)
-    setActiveTab('chat')
-  }
+  const selectedLangCode = LANGUAGE_OPTIONS.find((l) => l.label === selectedLang)?.code || 'KO'
+  const latestCaption = captions[captions.length - 1]
+  const latestTranslation =
+    latestCaption?.translations?.[selectedLangCode] ??
+    latestCaption?.translations?.[selectedLangCode.split('-')[0]]
 
-  const handleSendMessage = (event) => {
-    event.preventDefault()
-    const trimmed = chatDraft.trim()
-    if (!trimmed) return
-
-    setChatMessages((prev) => [...prev, { id: `msg-${Date.now()}`, sender: '나', text: trimmed }])
-    setChatDraft('')
-  }
-
-  const caption = captionScript[captionIndex]
+  const waitingList = (meetingInfo?.participants || []).map((p) => ({
+    name: p.username,
+    tzIcon: '🌐',
+    localTime: '--:--',
+  }))
 
   return (
     <section className="meeting-page">
       <header className="meeting-page__heading">
-        <h1>실시간 회의 — {MEETING_TITLE}</h1>
+        <h1>실시간 회의 — {meetingTitle}</h1>
         <p>DARI 안에서 바로 화상회의를 진행해요. 참가자 초대·내보내기도 여기서 할 수 있어요</p>
       </header>
+
+      {prejoinError && <p className="meeting-page__error">{prejoinError}</p>}
 
       <div className="meeting-layout">
         {joined ? (
@@ -178,43 +193,26 @@ function MeetingPage() {
 
             <div className="video-grid">
               {participants.map((participant) => (
-                <div
-                  className={`video-tile${participant.speaking ? ' video-tile--speaking' : ''}`}
-                  key={participant.id}
-                >
-                  <span className="video-tile__badge">
-                    {participant.tzIcon} {participant.localTime}
-                  </span>
-                  <span className="video-tile__avatar" style={{ background: participant.color }}>
-                    {participant.isMe ? '나' : participant.name.slice(0, 1)}
-                  </span>
-                  <span className="video-tile__footer">
-                    <span className="video-tile__name">{participant.name}</span>
-                    {participant.speaking ? (
-                      <span className="video-tile__speaking">🎙️ 말하는 중</span>
-                    ) : (
-                      <span className={`video-tile__icon${participant.micOn ? '' : ' is-muted'}`}>
-                        {participant.micOn ? '🔊' : '🔇'}
-                      </span>
-                    )}
-                    {!participant.cameraOn && <span className="video-tile__icon">🚫</span>}
-                  </span>
-                </div>
+                <VideoTile participant={participant} key={participant.id} />
               ))}
             </div>
 
-            {liveSubtitles && (
+            {liveSubtitles && latestCaption && (
               <div className="caption-bar">
-                <p className="caption-bar__original">원문 · &quot;{caption.original}&quot;</p>
-                <p className="caption-bar__translated">번역 · &quot;{caption.translated}&quot;</p>
+                <p className="caption-bar__original">
+                  원문 · {latestCaption.speakerName} · &quot;{latestCaption.original}&quot;
+                </p>
+                <p className="caption-bar__translated">
+                  번역 · &quot;{latestTranslation ?? latestCaption.original}&quot;
+                </p>
               </div>
             )}
 
             <div className="call-toolbar">
-              <button type="button" className="toolbar-btn" onClick={handleToggleMic}>
+              <button type="button" className="toolbar-btn" onClick={toggleMic}>
                 🎤 {micOn ? '음소거' : '음소거 해제'}
               </button>
-              <button type="button" className="toolbar-btn" onClick={handleToggleCamera}>
+              <button type="button" className="toolbar-btn" onClick={toggleCamera}>
                 📷 카메라 {cameraOn ? '끄기' : '켜기'}
               </button>
               <button type="button" className="toolbar-btn">
@@ -234,17 +232,20 @@ function MeetingPage() {
               >
                 💬 채팅
               </button>
-              <button type="button" className="toolbar-btn toolbar-btn--danger" onClick={handleLeave}>
+              <button type="button" className="toolbar-btn toolbar-btn--danger" onClick={leave}>
                 📞 나가기
+              </button>
+              <button type="button" className="toolbar-btn toolbar-btn--danger" onClick={endMeeting}>
+                ⏹️ 회의 종료
               </button>
             </div>
           </div>
         ) : (
           <div className="call-stage call-stage--prejoin">
             <div className="prejoin-preview">
-              <span className="prejoin-preview__avatar">나</span>
+              <span className="prejoin-preview__avatar">{me?.username?.slice(0, 1) || '나'}</span>
               <span className="prejoin-preview__label">
-                나{micOn ? '🎤' : '🔇'}{cameraOn ? '📷' : '🚫'}  
+                나{micOn ? '🎤' : '🔇'}{cameraOn ? '📷' : '🚫'}
               </span>
             </div>
 
@@ -252,21 +253,26 @@ function MeetingPage() {
               <button
                 type="button"
                 className={`toggle-btn${micOn ? ' is-on' : ''}`}
-                onClick={() => setMicOn((prev) => !prev)}
+                onClick={toggleMic}
               >
                 🎤 마이크 {micOn ? '켜짐' : '꺼짐'}
               </button>
               <button
                 type="button"
                 className={`toggle-btn${cameraOn ? ' is-on' : ''}`}
-                onClick={() => setCameraOn((prev) => !prev)}
+                onClick={toggleCamera}
               >
                 📷 카메라 {cameraOn ? '켜짐' : '꺼짐'}
               </button>
             </div>
 
-            <button type="button" className="join-btn" onClick={handleJoin}>
-              회의 참가하기 →
+            <button
+              type="button"
+              className="join-btn"
+              onClick={join}
+              disabled={connecting || !roomCode || !me}
+            >
+              {connecting ? '연결 중...' : '회의 참가하기 →'}
             </button>
           </div>
         )}
@@ -290,14 +296,14 @@ function MeetingPage() {
               <div className="tab-panel">
                 <p className="tab-panel__label">번역 언어</p>
                 <div className="lang-options">
-                  {translationLanguages.map((lang) => (
+                  {LANGUAGE_OPTIONS.map((lang) => (
                     <button
-                      key={lang}
+                      key={lang.code}
                       type="button"
-                      className={`lang-btn${selectedLang === lang ? ' is-selected' : ''}`}
-                      onClick={() => setSelectedLang(lang)}
+                      className={`lang-btn${selectedLang === lang.label ? ' is-selected' : ''}`}
+                      onClick={() => setSelectedLang(lang.label)}
                     >
-                      {lang}
+                      {lang.label}
                     </button>
                   ))}
                 </div>
@@ -314,30 +320,53 @@ function MeetingPage() {
                     <span className="switch__knob" />
                   </button>
                 </div>
+
+                <ul className="caption-history">
+                  {captions
+                    .slice()
+                    .reverse()
+                    .map((caption) => {
+                      const translated =
+                        caption.translations?.[selectedLangCode] ??
+                        caption.translations?.[selectedLangCode.split('-')[0]] ??
+                        caption.original
+                      return (
+                        <li key={caption.id} className="caption-history__item">
+                          <strong>{caption.speakerName}</strong>: {translated}
+                        </li>
+                      )
+                    })}
+                </ul>
               </div>
             )}
 
             {activeTab === 'cards' && (
               <div className="tab-panel">
                 <ul className="mtg-speech-card-list">
-                  {speechCards.map((card) => (
-                    <li className="mtg-speech-card" key={card.id}>
-                      <p className="mtg-speech-card__situation">
-                        <img src={card.flag} alt="" /> {card.situation}
-                      </p>
-                      <p className="mtg-speech-card__korean">{card.korean}</p>
-                      <p className="mtg-speech-card__translated">
-                        {card.langLabel} · {card.translated}
-                      </p>
-                      <button
-                        type="button"
-                        className="mtg-speech-card__btn"
-                        onClick={() => handlePasteToChat(card)}
-                      >
-                        💬 채팅에 붙여넣기
-                      </button>
-                    </li>
-                  ))}
+                  {speechCards.length === 0 && (
+                    <p className="tab-panel__empty">저장된 발언카드가 없어요. 리허설에서 만들어보세요!</p>
+                  )}
+                  {speechCards.map((card) => {
+                    const meta = LANG_META_BY_CODE[card.target_lang] || LANG_META_BY_CODE.EN
+                    return (
+                      <li className="mtg-speech-card" key={card.id}>
+                        <p className="mtg-speech-card__situation">
+                          <img src={meta.flag} alt="" /> {card.situation}
+                        </p>
+                        <p className="mtg-speech-card__korean">{card.korean_script}</p>
+                        <p className="mtg-speech-card__translated">
+                          {meta.label} · {card.translated_script}
+                        </p>
+                        <button
+                          type="button"
+                          className="mtg-speech-card__btn"
+                          onClick={() => handlePasteToChat(card)}
+                        >
+                          💬 채팅에 붙여넣기
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             )}
@@ -351,15 +380,12 @@ function MeetingPage() {
                         className="participant-row__avatar"
                         style={{ background: participant.color }}
                       >
-                        {participant.isMe ? '나' : participant.name.slice(0, 1)}
+                        {participant.isMe ? '나' : participant.name?.slice(0, 1)}
                       </span>
                       <span className="participant-row__info">
                         <span className="participant-row__name">
-                          {participant.name}
+                          {participant.isMe ? '나' : participant.name}
                           {participant.isHost && <span className="host-badge">호스트</span>}
-                        </span>
-                        <span className="participant-row__time">
-                          {participant.tzIcon} {participant.localTime}
                         </span>
                       </span>
                       <span className={`participant-row__icon${participant.micOn ? '' : ' is-muted'}`}>
@@ -375,7 +401,7 @@ function MeetingPage() {
                           type="button"
                           className="participant-row__remove"
                           aria-label={`${participant.name} 내보내기`}
-                          onClick={() => handleRemoveParticipant(participant.id)}
+                          onClick={() => kick(participant.id)}
                         >
                           ×
                         </button>
@@ -388,7 +414,7 @@ function MeetingPage() {
                   <input
                     type="text"
                     className="invite-input"
-                    placeholder="이름 입력 후 초대"
+                    placeholder="아이디 입력 후 초대"
                     value={inviteName}
                     onChange={(event) => setInviteName(event.target.value)}
                     onKeyDown={(event) => event.key === 'Enter' && handleInvite()}
@@ -425,15 +451,12 @@ function MeetingPage() {
           </aside>
         ) : (
           <aside className="waiting-card">
-            <h2 className="waiting-card__title">{MEETING_TITLE}</h2>
+            <h2 className="waiting-card__title">{meetingTitle}</h2>
             <p className="waiting-card__subtitle">참가 예정자 {waitingList.length}명이 이미 대기 중이에요</p>
             <ul className="waiting-card__list">
               {waitingList.map((person) => (
                 <li key={person.name}>
                   <span className="waiting-card__name">{person.name}</span>
-                  <span className="waiting-card__meta">
-                    · {person.tzIcon} {person.localTime}
-                  </span>
                 </li>
               ))}
             </ul>

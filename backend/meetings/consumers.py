@@ -69,7 +69,17 @@ class MeetingConsumer(AsyncWebsocketConsumer):
                     }
                 )
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
+        # AsyncWebsocketConsumer는 프레임 종류(text/binary)에 따라
+        # 이 receive() 하나만 호출한다. 오디오 청크(binary)는 receive_bytes로,
+        # 시그널링/채팅 등 JSON(text)은 아래 분기로 위임한다.
+        if bytes_data is not None:
+            await self.receive_bytes(bytes_data)
+            return
+
+        if text_data is None:
+            return
+
         data = json.loads(text_data)
         event_type = data.get('type')
 
@@ -152,6 +162,12 @@ class MeetingConsumer(AsyncWebsocketConsumer):
 
     async def status_changed(self, event):
         await self.send(text_data=json.dumps(event))
+
+    async def kicked(self, event):
+        """호스트가 강퇴한 참가자에게만 알림을 보내고 연결을 종료한다."""
+        if event['user_id'] is not None and str(event['user_id']) == str(self.user.id):
+            await self.send(text_data=json.dumps({'type': 'kicked'}))
+            await self.close()
 
 
     @database_sync_to_async
