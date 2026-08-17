@@ -20,6 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
 
+DARI_DEMO_MODE = os.environ.get('DARI_DEMO_MODE', '').lower() == 'true'
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
@@ -164,14 +166,21 @@ REST_FRAMEWORK = {
     ),
 }
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [("127.0.0.1", 6379)],  # 로컬 Redis 기본 포트
+if os.environ.get('USE_IN_MEMORY_CHANNEL_LAYER', '').lower() == 'true':
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                "hosts": [("127.0.0.1", 6379)],  # Redis 기본 포트
+            },
+        },
+    }
 MEDIA_SERVER_SECRET = 'your-media-server-secret-key-1234'
 # meetings -> tracker 서버 간 호출(ingest 엔드포인트) 인증용 공유 시크릿.
 # meetings 담당자와 값 공유 후 운영 환경에서는 환경변수로 교체할 것.

@@ -25,6 +25,7 @@ function App() {
             <Route path="/cards" element={<CardsPage />} />
             <Route path="/meeting/:meetingId" element={<MeetingPage />} />
             <Route path="/tracker" element={<TrackerPage />} />
+            <Route path="/summary" element={<SummaryPage />} />
             <Route path="/summary/:meetingId" element={<SummaryPage />} />
             <Route path="/mypage" element={<MyPage />} />
           </Route>

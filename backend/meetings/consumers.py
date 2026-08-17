@@ -18,6 +18,11 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
+        meeting_status = await self.get_meeting_status()
+        if meeting_status is None or meeting_status == 'ENDED':
+            await self.close()
+            return
+
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
         await self.set_participant_active_status(True)
@@ -139,7 +144,7 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             'sender_name': event['sender_name'],
             'message': event['message'],
             'is_speech_card': event['is_speech_card'],
-        }))
+        }, default=str))
 
     async def subtitle_broadcast(self, event):
         await self.send(text_data=json.dumps({
@@ -148,20 +153,20 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             'speaker_name': event['speaker_name'],
             'original_text': event['original_text'],
             'translations': event['translations']
-        }))
+        }, default=str))
 
     async def user_joined(self, event):
-        await self.send(text_data=json.dumps(event))
+        await self.send(text_data=json.dumps(event, default=str))
 
     async def user_left(self, event):
-        await self.send(text_data=json.dumps(event))
+        await self.send(text_data=json.dumps(event, default=str))
 
     async def webrtc_signal(self, event):
         if event['sender_id'] != self.user.id:
-            await self.send(text_data=json.dumps(event['signal_data']))
+            await self.send(text_data=json.dumps(event['signal_data'], default=str))
 
     async def status_changed(self, event):
-        await self.send(text_data=json.dumps(event))
+        await self.send(text_data=json.dumps(event, default=str))
 
     async def kicked(self, event):
         """호스트가 강퇴한 참가자에게만 알림을 보내고 연결을 종료한다."""
@@ -169,6 +174,10 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'type': 'kicked'}))
             await self.close()
 
+
+    @database_sync_to_async
+    def get_meeting_status(self):
+        return MeetingSession.objects.filter(room_code=self.room_code).values_list('status', flat=True).first()
 
     @database_sync_to_async
     def save_chat_message(self, message, is_speech_card):

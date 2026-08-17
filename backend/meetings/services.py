@@ -176,12 +176,14 @@ class MeetingSummaryPipeline:
             except Exception as e:
                 print(f"[AI 요약 생성 오류] {e}")
                 summary_text = "AI 요약 생성 중 일시적인 오류가 발생했습니다."
-        else:
+        elif getattr(settings, 'DARI_DEMO_MODE', False):
             summary_text = f"{meeting.title} 회의 관련 의견을 조율했으며, 주요 안건에 대한 검토 결과를 공유하기로 했습니다."
             action_items_data = [
                 {"task": "발표자료 수정", "assignee": "지민", "due_date": "2026-08-08"},
                 {"task": "계약서 검토", "assignee": "미지정", "due_date": None}
             ]
+        else:
+            summary_text = "AI 요약을 생성하려면 OPENAI_API_KEY 설정이 필요합니다."
 
         MeetingSummary.objects.update_or_create(
             meeting=meeting,
@@ -195,12 +197,14 @@ class MeetingSummaryPipeline:
             assignee = item.get('assignee') or '미지정'
             due_date = item.get('due_date')  # YYYY-MM-DD 또는 None
 
-            ActionItem.objects.create(
+            ActionItem.objects.update_or_create(
                 meeting=meeting,
                 task=task,
-                assignee=assignee,
-                due_date=due_date,
-                is_completed=False
+                defaults={
+                    'assignee': assignee,
+                    'due_date': due_date,
+                    'is_completed': False,
+                },
             )
 
 class MeetingShareFormatter:

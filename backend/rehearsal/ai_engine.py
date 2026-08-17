@@ -24,6 +24,13 @@ GROQ_TIMEOUT_SECONDS = getattr(settings, "GROQ_TIMEOUT_SECONDS", 12)
 
 LANGUAGE_NAMES = {"de": "독일어", "ja": "일본어", "zh": "중국어", "en": "영어"}
 
+DEMO_OPENINGS = {
+    "DE": "이번 일정 지연의 원인과 재발 방지 대책을 구체적으로 설명해주시겠어요?",
+    "JP": "이번 제안에 관해 사전에 조금 더 공유해주실 수 있을까요?",
+    "CN": "양쪽 모두에게 도움이 되는 조건을 함께 찾아보면 어떨까요?",
+    "US": "좋아요, 지금 가장 먼저 해결해야 할 이슈부터 이야기해볼까요?",
+}
+
 
 class AIEngineUnavailable(APIException):
     """Groq 호출 실패(키 없음/타임아웃/rate limit/응답 파싱 실패 등)를 나타내는 예외.
@@ -103,6 +110,30 @@ def _get_client():
     return _client
 
 
+def _demo_enabled():
+    return bool(getattr(settings, "DARI_DEMO_MODE", False))
+
+
+def _demo_completion(messages, as_json):
+    """Return deterministic output only after a failed Groq call in demo mode."""
+    prompt = "\n".join(message.get("content", "") for message in messages)
+    if as_json and '"replies"' in prompt:
+        return json.dumps({
+            "replies": [
+                "핵심 근거부터 설명드리겠습니다.",
+                "구체적인 대안을 함께 제안드리겠습니다.",
+            ]
+        }, ensure_ascii=False)
+    if as_json:
+        return json.dumps({
+            "situation_label": "근거와 대안을 명확히 전달해야 하는 상황",
+            "explanation": "요점을 먼저 말하고 구체적인 근거와 다음 행동을 덧붙이면 더 설득력 있어요.",
+            "suggested_text": "핵심 이유를 먼저 설명드린 뒤 실행 가능한 대안을 제안하겠습니다.",
+            "translated_text": "I'd like to explain the key reasons first, then propose an actionable alternative.",
+        }, ensure_ascii=False)
+    return "좋습니다. 그 입장을 뒷받침할 구체적인 근거와 실행 가능한 대안을 말씀해주시겠어요?"
+
+
 def _chat_completion(system_prompt, messages, *, temperature, as_json):
     client = _get_client()
     full_messages = [{"role": "system", "content": system_prompt}, *messages]
@@ -116,9 +147,15 @@ def _chat_completion(system_prompt, messages, *, temperature, as_json):
     except AIEngineUnavailable:
         raise
     except _GROQ_ERRORS as exc:
+        if _demo_enabled():
+            logger.warning("Groq failed; using deterministic demo fallback: %s", exc)
+            return _demo_completion(messages, as_json)
         logger.warning("Groq chat.completions 실패: %s", exc)
         raise AIEngineUnavailable(f"AI 응답 생성에 실패했습니다: {exc}") from exc
     except Exception as exc:  # SDK 내부 오류 등 위에서 못 잡는 경우까지 전부 동일하게 취급
+        if _demo_enabled():
+            logger.warning("Groq failed; using deterministic demo fallback: %s", exc)
+            return _demo_completion(messages, as_json)
         logger.warning("Groq chat.completions 실패(미분류): %s", exc)
         raise AIEngineUnavailable(f"AI 응답 생성에 실패했습니다: {exc}") from exc
 
@@ -126,6 +163,8 @@ def _chat_completion(system_prompt, messages, *, temperature, as_json):
     content = (choices[0].message.content if choices else None) or ""
     content = content.strip()
     if not content:
+        if _demo_enabled():
+            return _demo_completion(messages, as_json)
         raise AIEngineUnavailable("AI 응답이 비어 있습니다.")
     return content
 
@@ -161,6 +200,8 @@ def _build_conversation_messages(history, user_text):
 
 
 def generate_opening_message(persona, context=""):
+    if _demo_enabled() and not getattr(settings, "GROQ_API_KEY", ""):
+        return DEMO_OPENINGS.get(persona.culture_tag, "오늘 연습하고 싶은 업무 상황을 말씀해주세요.")
     system_prompt = _persona_system_prompt(persona)
     situation = context.strip() or "일반적인 업무 상황"
     prompt = (
@@ -171,12 +212,16 @@ def generate_opening_message(persona, context=""):
 
 
 def generate_ai_reply(persona, user_text, history=None):
+    if _demo_enabled() and not getattr(settings, "GROQ_API_KEY", ""):
+        return f"좋습니다. ‘{user_text[:40]}’라는 입장을 뒷받침할 구체적인 근거도 알려주시겠어요?"
     system_prompt = _persona_system_prompt(persona)
     messages = _build_conversation_messages(history, user_text)
     return _generate_text(system_prompt, messages)
 
 
 def generate_quick_replies(persona, ai_message=""):
+    if _demo_enabled() and not getattr(settings, "GROQ_API_KEY", ""):
+        return ["핵심 근거부터 설명드리겠습니다.", "구체적인 대안을 함께 제안드리겠습니다."]
     system_prompt = _persona_system_prompt(persona)
     prompt = (
         f'당신(페르소나)이 방금 이렇게 말했습니다: "{ai_message}"\n'
@@ -197,6 +242,21 @@ def generate_feedback(persona, user_text):
     """
     사용자 응답에 대한 코치 피드백을 생성한다.
     """
+    if _demo_enabled() and not getattr(settings, "GROQ_API_KEY", ""):
+        translations = {
+            "de": "Ich möchte zunächst die wichtigsten Gründe erläutern und anschließend eine konkrete Alternative vorschlagen.",
+            "ja": "まず主な理由をご説明し、その後で具体的な代案をご提案します。",
+            "zh": "我想先说明主要原因，然后提出一个具体的替代方案。",
+            "en": "I'd like to explain the main reasons first, then propose a concrete alternative.",
+        }
+        return {
+            "situation_label": "근거와 대안을 명확히 전달해야 할 때",
+            "explanation": "요점을 먼저 말하고 구체적인 근거와 다음 행동을 덧붙이면 더 설득력 있어요.",
+            "suggested_text": "핵심 이유를 먼저 설명드린 뒤, 실행 가능한 대안을 제안하겠습니다.",
+            "translated_text": translations.get(persona.language_code, translations["en"]),
+            "translated_language": persona.language_code,
+        }
+
     system_prompt = _persona_system_prompt(persona)
     target_language = LANGUAGE_NAMES.get(persona.language_code, persona.language_code)
     prompt = (

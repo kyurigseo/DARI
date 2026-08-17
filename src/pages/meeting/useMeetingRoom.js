@@ -27,6 +27,7 @@ export function useMeetingRoom(roomCode) {
   const [connecting, setConnecting] = useState(false)
   const [micOn, setMicOn] = useState(true)
   const [cameraOn, setCameraOn] = useState(true)
+  const [isScreenSharing, setIsScreenSharing] = useState(false)
   const [localStream, setLocalStream] = useState(null)
   const [participants, setParticipants] = useState([]) // [{id, name, isMe, isHost, micOn, cameraOn, speaking, stream, color}]
   const [captions, setCaptions] = useState([])
@@ -39,6 +40,8 @@ export function useMeetingRoom(roomCode) {
   const localStreamRef = useRef(null)
   const meRef = useRef(null)
   const mediaRecorderRef = useRef(null)
+  const cameraTrackRef = useRef(null)
+  const screenTrackRef = useRef(null)
   const toastTimerRef = useRef(null)
 
   const showToast = useCallback((message) => {
@@ -78,6 +81,27 @@ export function useMeetingRoom(roomCode) {
       isMounted = false
     }
   }, [roomCode])
+
+  useEffect(() => {
+    if (!meetingInfo || !me) return
+    setChatMessages(
+      (meetingInfo.chat_history || []).map((message) => ({
+        id: message.id,
+        sender: String(message.sender_id) === String(me.id) ? '나' : message.sender_name,
+        text: message.message,
+        isSpeechCard: message.is_speech_card,
+      })),
+    )
+    setCaptions(
+      (meetingInfo.transcript_history || []).map((transcript) => ({
+        id: transcript.id,
+        speakerId: transcript.speaker_id,
+        speakerName: transcript.speaker_name,
+        original: transcript.original_text,
+        translations: transcript.translations,
+      })),
+    )
+  }, [meetingInfo, me])
 
   const participantsRef = useRef([])
 
@@ -278,6 +302,14 @@ export function useMeetingRoom(roomCode) {
     mediaRecorderRef.current = null
 
     localStreamRef.current?.getTracks().forEach((track) => track.stop())
+    if (screenTrackRef.current) {
+      screenTrackRef.current.onended = null
+      screenTrackRef.current.stop()
+    }
+    cameraTrackRef.current?.stop()
+    screenTrackRef.current = null
+    cameraTrackRef.current = null
+    setIsScreenSharing(false)
     localStreamRef.current = null
     setLocalStream(null)
 
@@ -305,6 +337,7 @@ export function useMeetingRoom(roomCode) {
         track.enabled = cameraOn
       })
       localStreamRef.current = stream
+      cameraTrackRef.current = stream.getVideoTracks()[0] || null
       setLocalStream(stream)
 
       const existingParticipants = meetingInfo?.participants || []
@@ -396,7 +429,10 @@ export function useMeetingRoom(roomCode) {
   const toggleCamera = useCallback(() => {
     setCameraOn((prev) => {
       const next = !prev
-      localStreamRef.current?.getVideoTracks().forEach((track) => {
+      const cameraTracks = screenTrackRef.current
+        ? [cameraTrackRef.current].filter(Boolean)
+        : localStreamRef.current?.getVideoTracks() || []
+      cameraTracks.forEach((track) => {
         track.enabled = next
       })
       socketRef.current?.sendStatusUpdate({ isCameraOn: next })
@@ -404,6 +440,60 @@ export function useMeetingRoom(roomCode) {
       return next
     })
   }, [upsertParticipant])
+
+  const stopScreenShare = useCallback(async () => {
+    const cameraTrack = cameraTrackRef.current
+    const screenTrack = screenTrackRef.current
+    if (!screenTrack) return
+
+    peersRef.current.forEach((pc) => {
+      const sender = pc.getSenders().find((item) => item.track?.kind === 'video')
+      sender?.replaceTrack(cameraTrack || null)
+    })
+
+    const currentStream = localStreamRef.current
+    const audioTracks = currentStream?.getAudioTracks() || []
+    const restoredStream = new MediaStream([...audioTracks, ...(cameraTrack ? [cameraTrack] : [])])
+    localStreamRef.current = restoredStream
+    setLocalStream(restoredStream)
+    screenTrack.onended = null
+    screenTrack.stop()
+    screenTrackRef.current = null
+    setIsScreenSharing(false)
+    if (meRef.current) upsertParticipant(meRef.current.id, { stream: restoredStream })
+  }, [upsertParticipant])
+
+  const toggleScreenShare = useCallback(async () => {
+    if (screenTrackRef.current) {
+      await stopScreenShare()
+      return
+    }
+
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      const screenTrack = displayStream.getVideoTracks()[0]
+      if (!screenTrack) return
+
+      screenTrackRef.current = screenTrack
+      peersRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((item) => item.track?.kind === 'video')
+        sender?.replaceTrack(screenTrack)
+      })
+
+      const audioTracks = localStreamRef.current?.getAudioTracks() || []
+      const sharedStream = new MediaStream([...audioTracks, screenTrack])
+      localStreamRef.current = sharedStream
+      setLocalStream(sharedStream)
+      setIsScreenSharing(true)
+      if (meRef.current) upsertParticipant(meRef.current.id, { stream: sharedStream, cameraOn: true })
+      screenTrack.onended = () => {
+        stopScreenShare()
+      }
+    } catch (err) {
+      if (err?.name === 'NotAllowedError') showToast('화면 공유가 취소되었어요.')
+      else showToast('화면 공유를 시작하지 못했어요.')
+    }
+  }, [showToast, stopScreenShare, upsertParticipant])
 
   const sendChat = useCallback((text, isSpeechCard = false) => {
     if (!text.trim()) return
@@ -414,13 +504,21 @@ export function useMeetingRoom(roomCode) {
     async (username) => {
       if (!roomCode || !username.trim()) return
       try {
-        await meetingsApi.manageParticipants(roomCode, { username: username.trim() })
+        const data = await meetingsApi.manageParticipants(roomCode, { username: username.trim() })
+        if (data.participant) {
+          upsertParticipant(data.participant.user, {
+            name: data.participant.username,
+            isHost: data.participant.is_host,
+            micOn: data.participant.is_mic_on,
+            cameraOn: data.participant.is_camera_on,
+          })
+        }
         showToast(`${username}님을 초대했어요`)
       } catch (err) {
         showToast(err?.response?.data?.error || '초대에 실패했어요')
       }
     },
-    [roomCode, showToast],
+    [roomCode, showToast, upsertParticipant],
   )
 
   const kick = useCallback(
@@ -442,10 +540,11 @@ export function useMeetingRoom(roomCode) {
     if (!roomCode) return
     try {
       await meetingsApi.endMeeting(roomCode)
-      showToast('회의를 종료했어요. AI 요약을 생성하고 있어요.')
       leave()
+      return true
     } catch (err) {
       showToast(err?.response?.data?.error || '회의 종료에 실패했어요')
+      return false
     }
   }, [roomCode, showToast, leave])
 
@@ -460,6 +559,7 @@ export function useMeetingRoom(roomCode) {
     connecting,
     micOn,
     cameraOn,
+    isScreenSharing,
     localStream,
     participants,
     captions,
@@ -469,6 +569,7 @@ export function useMeetingRoom(roomCode) {
     leave,
     toggleMic,
     toggleCamera,
+    toggleScreenShare,
     sendChat,
     invite,
     kick,

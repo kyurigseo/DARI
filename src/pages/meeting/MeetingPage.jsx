@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { getSpeechCards } from '../../api/meetings'
 import { useMeetingRoom } from './useMeetingRoom'
 import germanFlag from '../../assets/img/flags/de.svg'
@@ -83,6 +83,7 @@ function VideoTile({ participant }) {
 
 function MeetingPage() {
   const { meetingId: roomCode } = useParams()
+  const navigate = useNavigate()
 
   const {
     me,
@@ -92,6 +93,7 @@ function MeetingPage() {
     connecting,
     micOn,
     cameraOn,
+    isScreenSharing,
     participants,
     captions,
     chatMessages,
@@ -100,6 +102,7 @@ function MeetingPage() {
     leave,
     toggleMic,
     toggleCamera,
+    toggleScreenShare,
     sendChat,
     invite,
     kick,
@@ -117,6 +120,7 @@ function MeetingPage() {
   const chatLogRef = useRef(null)
 
   const meetingTitle = meetingInfo?.title || (roomCode ? `회의 ${roomCode}` : '회의')
+  const isHost = Boolean(me && meetingInfo?.host_id && String(me.id) === String(meetingInfo.host_id))
 
   useEffect(() => {
     if (!joined) {
@@ -157,6 +161,12 @@ function MeetingPage() {
     if (!trimmed) return
     invite(trimmed)
     setInviteName('')
+  }
+
+  const handleEndMeeting = async () => {
+    if (await endMeeting()) {
+      navigate(`/summary/${roomCode}`)
+    }
   }
 
   const selectedLangCode = LANGUAGE_OPTIONS.find((l) => l.label === selectedLang)?.code || 'KO'
@@ -215,8 +225,13 @@ function MeetingPage() {
               <button type="button" className="toolbar-btn" onClick={toggleCamera}>
                 📷 카메라 {cameraOn ? '끄기' : '켜기'}
               </button>
-              <button type="button" className="toolbar-btn">
-                🖥️ 화면공유
+              <button
+                type="button"
+                className={`toolbar-btn${isScreenSharing ? ' is-active' : ''}`}
+                aria-pressed={isScreenSharing}
+                onClick={toggleScreenShare}
+              >
+                🖥️ {isScreenSharing ? '공유 중지' : '화면공유'}
               </button>
               <button
                 type="button"
@@ -235,9 +250,11 @@ function MeetingPage() {
               <button type="button" className="toolbar-btn toolbar-btn--danger" onClick={leave}>
                 📞 나가기
               </button>
-              <button type="button" className="toolbar-btn toolbar-btn--danger" onClick={endMeeting}>
-                ⏹️ 회의 종료
-              </button>
+              {isHost && (
+                <button type="button" className="toolbar-btn toolbar-btn--danger" onClick={handleEndMeeting}>
+                  ⏹️ 회의 종료
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -396,7 +413,7 @@ function MeetingPage() {
                       >
                         {participant.cameraOn ? '📷' : '🚫'}
                       </span>
-                      {!participant.isMe && (
+                      {isHost && !participant.isMe && (
                         <button
                           type="button"
                           className="participant-row__remove"

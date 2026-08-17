@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -22,6 +23,9 @@ def _parse_participant_ids_query(request, default_to_self=True):
     ids = [v.strip() for v in raw.split(",") if v.strip()]
     if not ids and default_to_self:
         ids = [str(request.user.id)]
+    if settings.DARI_DEMO_MODE and (not ids or ids == [str(request.user.id)]):
+        demo_ids = User.objects.filter(username__in=["지민", "Anna", "Yuki"]).values_list("id", flat=True)
+        ids = [str(request.user.id), *(str(user_id) for user_id in demo_ids)]
     return ids
 
 
@@ -176,6 +180,8 @@ class RecommendationView(APIView):
         serializer = ParticipantIdsQuerySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         participant_ids = [str(pid) for pid in serializer.validated_data["participant_ids"]]
+        if settings.DARI_DEMO_MODE and participant_ids == [str(request.user.id)]:
+            participant_ids = _parse_participant_ids_query(request)
 
         best = services.recommend_slot(participant_ids)
         if best is None:

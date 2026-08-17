@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboard } from '../../api/home'
+import CreateMeetingModal from './CreateMeetingModal'
 import './HomePage.css'
 
 function formatTime(isoString) {
@@ -56,6 +57,7 @@ function HomePage() {
   const [dashboard, setDashboard] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -97,9 +99,18 @@ function HomePage() {
 
   return (
     <div className="home-page">
-      <div className="home-page__heading">
-        <h1>{dashboard?.greeting ?? '안녕하세요 👋'}</h1>
-        <p>오늘 {dashboard?.today_meeting_count ?? meetings.length}개의 회의가 예정되어 있어요</p>
+      <div className="home-page__heading-row">
+        <div className="home-page__heading">
+          <h1>{dashboard?.greeting ?? '안녕하세요 👋'}</h1>
+          <p>오늘 {dashboard?.today_meeting_count ?? meetings.length}개의 회의가 예정되어 있어요</p>
+        </div>
+        <button
+          type="button"
+          className="home-page__create-button"
+          onClick={() => setIsCreateModalOpen(true)}
+        >
+          <span aria-hidden="true">＋</span> 새 회의 만들기
+        </button>
       </div>
 
       <section className="home-page__meetings" aria-label="오늘의 회의">
@@ -117,7 +128,10 @@ function HomePage() {
               </div>
               <p>{meeting.participant_count}명 참석 예정</p>
             </div>
-            <Link className="meeting-card__button" to={`/meeting/${meeting.meeting_id}`}>
+            <Link
+              className="meeting-card__button"
+              to={meeting.join_url || `/meeting/${meeting.room_code || meeting.meeting_id}`}
+            >
               참가하기 <span aria-hidden="true">→</span>
             </Link>
           </article>
@@ -140,6 +154,10 @@ function HomePage() {
           </Link>
         ))}
       </section>
+
+      {isCreateModalOpen && (
+        <CreateMeetingModal onClose={() => setIsCreateModalOpen(false)} />
+      )}
     </div>
   )
 }

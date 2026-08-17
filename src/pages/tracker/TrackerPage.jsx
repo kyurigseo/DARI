@@ -15,22 +15,24 @@ const timeLabels = Array.from({ length: 12 }, (_, index) => `${String(index * 2)
 const todayWeekday = (new Date().getUTCDay() + 6) % 7 // JS: 0=일요일 -> 0=월요일 변환 (UTC 기준)
 
 function statusFromBackend(value) {
-  if (value === 'comfortable') return 'comfortable'
-  if (value === 'uncomfortable') return 'uncomfortable'
-  if (value === 'neutral') return 'normal'
+  if (value === 'COMFORTABLE') return 'comfortable'
+  if (value === 'UNCOMFORTABLE') return 'uncomfortable'
+  if (value === 'NEUTRAL') return 'normal'
   return 'normal'
 }
 
 function statusToBackend(value) {
-  if (value === 'normal') return 'neutral'
-  return value
+  if (value === 'comfortable') return 'COMFORTABLE'
+  if (value === 'uncomfortable') return 'UNCOMFORTABLE'
+  return 'NEUTRAL'
 }
 
 function TrackerPage() {
   const [finderExpanded, setFinderExpanded] = useState(false)
   const [me, setMe] = useState(null)
   const [alert, setAlert] = useState(null)
-  const [participation, setParticipation] = useState(null)
+  const [participation, setParticipation] = useState([])
+  const [heatmapRows, setHeatmapRows] = useState([])
   const [myRow, setMyRow] = useState(() => Array(48).fill('normal'))
   const [recommendation, setRecommendation] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -58,18 +60,22 @@ function TrackerPage() {
 
         if (!isMounted) return
         setAlert(alertData)
-        setParticipation(participationData.results?.[0] ?? null)
+        setParticipation(participationData.results ?? [])
         setRecommendation(recommendationData.recommendation)
 
-        const myHeatmapRow = heatmapData.results?.find((row) => row.user_id === user.id)
-        if (myHeatmapRow) {
+        const rows = (heatmapData.results ?? []).map((heatmapRow) => {
           const row = Array(48).fill('normal')
-          for (const slot of myHeatmapRow.slots) {
+          for (const slot of heatmapRow.slots) {
             if (slot.weekday === todayWeekday) {
               row[slot.half_hour_index] = statusFromBackend(slot.status)
             }
           }
-          setMyRow(row)
+          return { ...heatmapRow, cells: row }
+        })
+        setHeatmapRows(rows)
+        const myHeatmapRow = rows.find((row) => row.user_id === user.id)
+        if (myHeatmapRow) {
+          setMyRow(myHeatmapRow.cells)
         }
       } catch {
         // 개별 위젯 실패는 화면 전체를 막지 않고 해당 섹션만 빈 상태로 둔다.
@@ -89,6 +95,13 @@ function TrackerPage() {
     const nextStatus = statusOrder[(statusOrder.indexOf(currentStatus) + 1) % statusOrder.length]
 
     setMyRow((current) => current.map((status, index) => (index === cellIndex ? nextStatus : status)))
+    setHeatmapRows((rows) =>
+      rows.map((row) =>
+        row.is_me
+          ? { ...row, cells: row.cells.map((status, index) => (index === cellIndex ? nextStatus : status)) }
+          : row,
+      ),
+    )
 
     try {
       await updateMyHeatmapSlot({
@@ -98,6 +111,13 @@ function TrackerPage() {
       })
     } catch {
       setMyRow((current) => current.map((status, index) => (index === cellIndex ? currentStatus : status)))
+      setHeatmapRows((rows) =>
+        rows.map((row) =>
+          row.is_me
+            ? { ...row, cells: row.cells.map((status, index) => (index === cellIndex ? currentStatus : status)) }
+            : row,
+        ),
+      )
       showToast('시간대 변경에 실패했어요.')
     }
   }
@@ -120,7 +140,7 @@ function TrackerPage() {
         title: meetingTitle,
         weekday: recommendation.weekday,
         halfHourIndex: recommendation.half_hour_index,
-        participantIds: [me.id],
+        participantIds: recommendation.participants.map((participant) => participant.user_id),
       })
       setConfirmed(true)
       setModalOpen(false)
@@ -171,23 +191,27 @@ function TrackerPage() {
         <p>참여 시간대 기록을 보고, 모두에게 공정한 회의 시간을 함께 찾아보세요</p>
       </header>
 
-      {participation && participation.total_records > 0 && (
+      {participation.length > 0 && (
         <section className="participation-card" aria-labelledby="participation-title">
-          <h2 id="participation-title">최근 {participation.window}회 참여 시간대</h2>
+          <h2 id="participation-title">최근 {participation[0]?.window ?? 6}회 참여 시간대</h2>
           <div className="participation-card__list">
-            {Object.entries(participation.buckets)
-              .filter(([, bucket]) => bucket.count > 0)
-              .map(([key, bucket]) => (
-                <div className="participation-row" key={key}>
-                  <span className="participation-row__avatar">{participation.username}</span>
+            {participation.map((person, index) => {
+              const dominant = Object.values(person.buckets).sort((a, b) => b.count - a.count)[0]
+              return (
+                <div
+                  className={`participation-row participation-row--${['red', 'teal', 'orange', 'teal'][index % 4]}`}
+                  key={person.user_id}
+                >
+                  <span className="participation-row__avatar">{person.user_id === me?.id ? '나' : person.username}</span>
                   <div className="participation-row__track" aria-hidden="true">
-                    <span style={{ width: `${Math.round(bucket.ratio * 100)}%` }} />
+                    <span style={{ width: `${Math.round((dominant?.ratio ?? 0) * 100)}%` }} />
                   </div>
                   <span className="participation-row__badge">
-                    {bucket.label} {bucket.count}/{participation.total_records}
+                    {dominant?.label} {dominant?.count ?? 0}/{person.total_records}
                   </span>
                 </div>
-              ))}
+              )
+            })}
           </div>
         </section>
       )}
@@ -230,13 +254,17 @@ function TrackerPage() {
                   ))}
                 </div>
 
-                <div className="availability-row availability-row--me">
-                  <strong>나</strong>
-                  <div className="availability-row__cells">
-                    {myRow.map((status, index) => {
+                {heatmapRows.map((person) => (
+                  <div
+                    className={`availability-row${person.is_me ? ' availability-row--me' : ''}`}
+                    key={person.user_id}
+                  >
+                    <strong>{person.is_me ? '나' : person.username}</strong>
+                    <div className="availability-row__cells">
+                    {(person.is_me ? myRow : person.cells).map((status, index) => {
                       const time = `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 ? '30' : '00'}`
 
-                      return (
+                      return person.is_me ? (
                         <button
                           className={`availability-cell availability-cell--${status}`}
                           type="button"
@@ -244,10 +272,17 @@ function TrackerPage() {
                           onClick={() => cycleMyAvailability(index)}
                           key={time}
                         />
+                      ) : (
+                        <span
+                          className={`availability-cell availability-cell--${status}`}
+                          aria-label={`${person.username} ${time}, ${status}`}
+                          key={time}
+                        />
                       )
                     })}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
 
@@ -265,8 +300,8 @@ function TrackerPage() {
                       <span>
                         <strong>{person.username}</strong> · 현지 {person.local_time}
                       </span>
-                      <span className={`recommendation-status recommendation-status--${person.status}`}>
-                        ● {person.status === 'comfortable' ? '✅ 편한 시간' : '🔴 불편한 시간'}
+                      <span className={`recommendation-status recommendation-status--${statusFromBackend(person.status)}`}>
+                        ● {person.status === 'COMFORTABLE' ? '✅ 편한 시간' : person.status === 'NEUTRAL' ? '보통' : '🔴 불편한 시간'}
                       </span>
                     </div>
                   ))}
@@ -310,8 +345,8 @@ function TrackerPage() {
                   <span>
                     <b>{person.username}</b> · 현지 {person.local_time}
                   </span>
-                  <span className={`recommendation-status recommendation-status--${person.status}`}>
-                    ● {person.status === 'comfortable' ? '✅ 편한 시간' : '🔴 불편한 시간'}
+                  <span className={`recommendation-status recommendation-status--${statusFromBackend(person.status)}`}>
+                    ● {person.status === 'COMFORTABLE' ? '✅ 편한 시간' : person.status === 'NEUTRAL' ? '보통' : '🔴 불편한 시간'}
                   </span>
                 </div>
               ))}

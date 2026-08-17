@@ -47,7 +47,7 @@ def create_meeting(request, *, title, room_code):
         "/api/meetings/",
         data=json.dumps({"title": title, "room_code": room_code}),
         content_type="application/json",
-        SERVER_NAME="127.0.0.1",
+        SERVER_NAME=request.get_host().split(":", 1)[0],
         **_auth_extra(request),
     )
     if response.status_code != 201:
@@ -66,7 +66,7 @@ def invite_participant(request, *, room_code, user_id):
         f"/api/meetings/{room_code}/participants/",
         data=json.dumps({"username": user.username}),
         content_type="application/json",
-        SERVER_NAME="127.0.0.1",
+        SERVER_NAME=request.get_host().split(":", 1)[0],
         **_auth_extra(request),
     )
     if response.status_code != 200:

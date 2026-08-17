@@ -8,9 +8,9 @@ const navigationItems = [
   { label: '홈', icon: '🏠', to: '/', end: true },
   { label: 'AI 리허설', icon: '🎭', to: '/rehearsal' },
   { label: '발언 카드함', icon: '🗂️', to: '/cards' },
-  { label: '실시간 회의', icon: '🎥', to: '/meeting/m1' },
+  { label: '실시간 회의', icon: '🎥', to: '/' },
   { label: '시차 트래커', icon: '🌓', to: '/tracker' },
-  { label: '회의 요약', icon: '📝', to: '/summary/m1' },
+  { label: '회의 요약', icon: '📝', to: '/summary' },
   { label: '마이페이지', icon: '👤', to: '/mypage' },
 ]
 

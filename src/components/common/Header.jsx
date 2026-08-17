@@ -24,7 +24,7 @@ function Header({ onMenuClick }) {
       </div>
 
       <div className="header__right">
-        <Link className="header__meeting" to="/meeting/m1">
+        <Link className="header__meeting" to="/">
           <span aria-hidden="true">📅</span>
           <span>14:00 · Acme Corp 협상</span>
         </Link>

@@ -35,13 +35,11 @@ def create_card(request, *, original_text, suggested_text, translated_text,
     extra = {"HTTP_AUTHORIZATION": auth_header} if auth_header else {}
 
     payload = {
-        "original_text": original_text,
         "suggested_text": suggested_text,
         "translated_text": translated_text,
         "translated_language": translated_language,
         "situation_label": situation_label,
         "partner_tag": partner_tag,
-        "category": category or "미분류",
         "explanation": explanation,
     }
 
@@ -49,7 +47,7 @@ def create_card(request, *, original_text, suggested_text, translated_text,
         "/api/v1/cards/",
         data=json.dumps(payload),
         content_type="application/json",
-        SERVER_NAME="127.0.0.1",
+        SERVER_NAME=request.get_host().split(":", 1)[0],
         **extra,
     )
     if response.status_code != 201:

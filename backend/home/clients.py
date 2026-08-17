@@ -16,6 +16,7 @@ import urllib.request
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.db import models
 from django.test import Client as DjangoTestClient
 from django.utils import timezone
 
@@ -68,6 +69,35 @@ def fetch_today_meetings(request):
               -> [{meeting_id, title, start_time, end_time, participant_count, join_url}]
     (아직 meetings 앱이 없어 항상 목업으로 폴백됨)
     """
+    if settings.DARI_DEMO_MODE:
+        # Demo meetings are real rows created by seed_demo_data. The meeting
+        # route uses room_code, not MeetingSession's UUID primary key.
+        from meetings.models import MeetingSession
+
+        demo_meetings = (
+            MeetingSession.objects.filter(
+                models.Q(host=request.user) | models.Q(participants__user=request.user),
+                room_code__startswith="demo-",
+            )
+            .distinct()
+            .order_by("created_at")
+        )
+        results = [
+            {
+                "meeting_id": str(meeting.id),
+                "room_code": meeting.room_code,
+                "title": meeting.title,
+                "start_time": meeting.created_at.isoformat(),
+                "end_time": (meeting.created_at + timedelta(hours=1)).isoformat(),
+                "participant_count": meeting.participants.filter(is_active=True).count(),
+                "join_url": f"/meeting/{meeting.room_code}",
+                "joinable": meeting.status != "ENDED",
+            }
+            for meeting in demo_meetings
+            if meeting.status != "ENDED"
+        ]
+        return {"count": len(results), "results": results, "source": "demo"}
+
     try:
         raw = _call_external_service(
             "MEETINGS_BASE_URL",
