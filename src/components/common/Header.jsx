@@ -24,10 +24,10 @@ function Header({ onMenuClick }) {
       </div>
 
       <div className="header__right">
-        <Link className="header__meeting" to="/">
+        {/* <Link className="header__meeting" to="/">
           <span aria-hidden="true">📅</span>
           <span>14:00 · Acme Corp 협상</span>
-        </Link>
+        </Link> */}
         <Link className="header__profile" to="/mypage" aria-label="마이페이지">
           김
         </Link>
