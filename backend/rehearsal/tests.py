@@ -80,6 +80,7 @@ class AIEngineTextGenerationTests(TestCase):
         self.assertEqual(messages[-1], {"role": "user", "content": "제 답변입니다."})
 
     @patch("rehearsal.ai_engine._get_client")
+    @override_settings(DARI_DEMO_MODE=False)
     def test_api_error_becomes_ai_engine_unavailable(self, mock_get_client):
         def impl(**kw):
             raise TimeoutError("simulated timeout")
@@ -88,6 +89,17 @@ class AIEngineTextGenerationTests(TestCase):
         with self.assertRaises(ai_engine.AIEngineUnavailable) as ctx:
             ai_engine.generate_opening_message(self.persona)
         self.assertEqual(ctx.exception.status_code, 502)
+
+    @patch("rehearsal.ai_engine._get_client")
+    @override_settings(DARI_DEMO_MODE=True, GROQ_API_KEY="invalid-demo-key")
+    def test_api_error_uses_fallback_in_demo_mode(self, mock_get_client):
+        mock_get_client.return_value = _fake_client(
+            lambda **kw: (_ for _ in ()).throw(TimeoutError("simulated timeout"))
+        )
+
+        result = ai_engine.generate_opening_message(self.persona)
+
+        self.assertIn("구체적인 근거", result)
 
     @override_settings(GROQ_API_KEY="")
     def test_missing_api_key_raises_ai_engine_unavailable(self):

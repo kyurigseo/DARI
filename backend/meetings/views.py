@@ -10,6 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
+from django.utils import timezone
+from cards.models import Card
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
@@ -56,13 +58,36 @@ class PrejoinView(APIView):
 
         active_participants = meeting.participants.filter(is_active=True)
 
-        return Response({
+        response_data = {
             'room_code': meeting.room_code,
             'title': meeting.title,
+            'host_id': str(meeting.host_id),
             'status': meeting.status,
             'participants_count': active_participants.count(),
             'participants': ParticipantSerializer(active_participants, many=True).data
-        })
+        }
+        if settings.DARI_DEMO_MODE and meeting.room_code.startswith('demo-'):
+            response_data['chat_history'] = [
+                {
+                    'id': str(message.id),
+                    'sender_id': str(message.sender_id),
+                    'sender_name': message.sender.username,
+                    'message': message.message,
+                    'is_speech_card': message.is_speech_card,
+                }
+                for message in meeting.chat_messages.select_related('sender').all()
+            ]
+            response_data['transcript_history'] = [
+                {
+                    'id': str(transcript.id),
+                    'speaker_id': str(transcript.speaker_id),
+                    'speaker_name': transcript.speaker.username,
+                    'original_text': transcript.original_text,
+                    'translations': transcript.translations,
+                }
+                for transcript in meeting.transcripts.select_related('speaker').all()
+            ]
+        return Response(response_data)
 
 
 class MediaTokenView(APIView):
@@ -89,9 +114,19 @@ class SpeechCardListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        cards = SpeechCard.objects.filter(user=request.user)
-        serializer = SpeechCardSerializer(cards, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        cards = Card.objects.filter(owner=request.user)
+        return Response([
+            {
+                'id': str(card.id),
+                'persona_name': card.partner_tag,
+                'situation': card.situation_label,
+                'korean_script': card.text_ko,
+                'translated_script': card.text_translated,
+                'target_lang': card.language_code.upper(),
+                'created_at': card.created_at,
+            }
+            for card in cards
+        ], status=status.HTTP_200_OK)
 
 
 class ParticipantManageView(APIView):
@@ -117,7 +152,13 @@ class ParticipantManageView(APIView):
             user=invited_user,
             defaults={'is_host': False}
         )
-        return Response({'message': f'{username} 님을 회의에 초대했습니다.'}, status=status.HTTP_200_OK)
+        if not participant.is_active:
+            participant.is_active = True
+            participant.save(update_fields=['is_active'])
+        return Response({
+            'message': f'{username} 님을 회의에 초대했습니다.',
+            'participant': ParticipantSerializer(participant).data,
+        }, status=status.HTTP_200_OK)
 
 
 class KickParticipantView(APIView):
@@ -168,11 +209,15 @@ class EndMeetingView(APIView):
             return Response({'error': '회의를 종료할 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
 
         meeting.status = 'ENDED'
-        meeting.save()
-        threading.Thread(
-            target=MeetingSummaryPipeline.generate_summary_and_action_items,
-            args=(meeting.id,)
-        ).start()
+        meeting.ended_at = timezone.now()
+        meeting.save(update_fields=['status', 'ended_at'])
+        if settings.DARI_DEMO_MODE:
+            MeetingSummaryPipeline.generate_summary_and_action_items(meeting.id)
+        else:
+            threading.Thread(
+                target=MeetingSummaryPipeline.generate_summary_and_action_items,
+                args=(meeting.id,)
+            ).start()
 
         return Response({
             'message': '회의가 성공적으로 종료되었으며, AI 요약 생성이 시작되었습니다.',
@@ -191,7 +236,7 @@ class UserMeetingListView(APIView):
         user = request.user
         meetings = MeetingSession.objects.filter(
             models.Q(host=user) | models.Q(participants__user=user)
-        ).distinct().order_by('-created_at')
+        ).filter(status='ENDED').distinct().order_by('-created_at')
 
         serializer = MeetingSummaryTabSerializer(meetings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

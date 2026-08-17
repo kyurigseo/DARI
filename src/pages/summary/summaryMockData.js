@@ -7,7 +7,7 @@ export const teamMembers = [
 
 export const meetingSummaries = [
   {
-    id: 'm1',
+    id: 'mock-acme-budget',
     title: 'Q3 예산안 협상 (Acme Corp)',
     date: '8/1',
     aiSummary:
@@ -18,7 +18,7 @@ export const meetingSummaries = [
     ],
   },
   {
-    id: 'm2',
+    id: 'mock-weekly-standup',
     title: '주간 팀 스탠드업',
     date: '7/29',
     aiSummary:
@@ -28,7 +28,7 @@ export const meetingSummaries = [
     ],
   },
   {
-    id: 'm3',
+    id: 'mock-berlin-sync',
     title: '베를린 지사 동기화',
     date: '7/25',
     aiSummary:

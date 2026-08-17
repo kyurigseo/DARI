@@ -7,7 +7,6 @@ import {
   deleteMemo,
   updateActionItem,
   getShareText,
-  sendReportEmail,
 } from '../../api/meetings'
 import './SummaryPage.css'
 
@@ -16,6 +15,7 @@ function SummaryPage() {
   const navigate = useNavigate()
 
   const [tabs, setTabs] = useState([])
+  const [selectedRoomCode, setSelectedRoomCode] = useState(null)
   const [report, setReport] = useState(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [toast, setToast] = useState(null)
@@ -34,8 +34,14 @@ function SummaryPage() {
       .then((data) => {
         if (!isMounted) return
         setTabs(data)
-        if (!roomCode && data.length > 0) {
-          navigate(`/summary/${data[0].room_code}`, { replace: true })
+        const validRoomCodes = new Set(data.map((tab) => tab.room_code).filter(Boolean))
+        const nextRoomCode = roomCode && validRoomCodes.has(roomCode)
+          ? roomCode
+          : data.find((tab) => tab.room_code)?.room_code
+
+        setSelectedRoomCode(nextRoomCode || null)
+        if (nextRoomCode && nextRoomCode !== roomCode) {
+          navigate(`/summary/${nextRoomCode}`, { replace: true })
         }
       })
       .catch(() => {})
@@ -47,27 +53,39 @@ function SummaryPage() {
   }, [])
 
   useEffect(() => {
-    if (!roomCode) return undefined
+    if (!selectedRoomCode) return undefined
     let isMounted = true
+    let pollTimer = null
+    let pollCount = 0
     setIsLoading(true)
     setNoteDraft('')
 
-    getMeetingReport(roomCode)
-      .then((data) => {
-        if (isMounted) setReport(data)
-      })
-      .catch(() => {
-        if (isMounted) showToast('회의 정보를 불러오지 못했어요.')
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false)
-      })
+    const loadReport = () => {
+      getMeetingReport(selectedRoomCode)
+        .then((data) => {
+          if (!isMounted) return
+          setReport(data)
+          setIsLoading(false)
+          if (data.ai_summary === '아직 생성된 회의 요약이 없습니다.' && pollCount < 15) {
+            pollCount += 1
+            pollTimer = setTimeout(loadReport, 2000)
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setIsLoading(false)
+            showToast('회의 정보를 불러오지 못했어요.')
+          }
+        })
+    }
+    loadReport()
 
     return () => {
       isMounted = false
+      clearTimeout(pollTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode])
+  }, [selectedRoomCode])
 
   useEffect(() => () => clearTimeout(toastTimerRef.current), [])
 
@@ -78,6 +96,7 @@ function SummaryPage() {
   }
 
   const handleTabClick = (code) => {
+    setSelectedRoomCode(code)
     navigate(`/summary/${code}`)
   }
 

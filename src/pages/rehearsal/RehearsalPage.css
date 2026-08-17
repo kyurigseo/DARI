@@ -364,3 +364,26 @@
     text-align: left;
   }
 }
+.rehearsal-chat__complete {
+  margin: 0 16px 10px;
+  padding: 10px 12px;
+  color: #167f5d;
+  background: #e8f8f2;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rehearsal-chat__end {
+  align-self: flex-end;
+  margin: 8px 16px 14px;
+  padding: 8px 13px;
+  color: var(--color-muted);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}

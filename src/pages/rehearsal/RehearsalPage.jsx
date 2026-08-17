@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import koreanFlag from '../../assets/img/flags/kr.svg'
-import { getPersonas, startSession, sendMessage, saveFeedbackAsCard } from '../../api/rehearsal'
+import { getPersonas, startSession, sendMessage, endSession, saveFeedbackAsCard } from '../../api/rehearsal'
 import { getLanguageMeta } from '../cards/languageMeta'
 import './RehearsalPage.css'
 
@@ -19,6 +19,8 @@ function RehearsalPage() {
   const [toast, setToast] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
+  const [sessionEnded, setSessionEnded] = useState(false)
+  const [finalFeedbackCount, setFinalFeedbackCount] = useState(0)
   const chatLogRef = useRef(null)
   const toastTimerRef = useRef(null)
 
@@ -68,6 +70,8 @@ function RehearsalPage() {
     setMessages([])
     setPendingFeedback(null)
     setSessionId(null)
+    setSessionEnded(false)
+    setFinalFeedbackCount(0)
     setToast(false)
 
     if (toastTimerRef.current) {
@@ -132,6 +136,20 @@ function RehearsalPage() {
       toastTimerRef.current = setTimeout(() => setToast(false), 2500)
     } catch {
       // 저장 실패 시 토스트를 띄우지 않고 버튼을 다시 활성 상태로 둔다.
+    }
+  }
+
+  const handleEndSession = async () => {
+    if (!sessionId || sessionEnded || isSending) return
+    try {
+      const data = await endSession(sessionId)
+      setSessionEnded(true)
+      setFinalFeedbackCount(data.feedback_list?.length ?? 0)
+    } catch {
+      setMessages((current) => [
+        ...current,
+        { id: `end-error-${Date.now()}`, sender: 'ai', text: '리허설을 종료하지 못했어요. 다시 시도해주세요.' },
+      ])
     }
   }
 
@@ -222,6 +240,12 @@ function RehearsalPage() {
           ))}
         </div>
 
+        {sessionEnded && (
+          <p className="rehearsal-chat__complete" role="status">
+            리허설을 마쳤어요. 총 {finalFeedbackCount}개의 피드백을 확인했어요 ✅
+          </p>
+        )}
+
         <form className="rehearsal-composer" onSubmit={handleSubmit}>
           <textarea
             aria-label="답변"
@@ -230,12 +254,17 @@ function RehearsalPage() {
             onChange={(event) => setInputValue(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="답변을 입력해보세요"
-            disabled={isSending}
+            disabled={isSending || sessionEnded}
           />
-          <button type="submit" disabled={isSending}>
+          <button type="submit" disabled={isSending || sessionEnded}>
             {isSending ? '전송 중...' : '전송'}
           </button>
         </form>
+        {sessionId && !sessionEnded && (
+          <button className="rehearsal-chat__end" type="button" onClick={handleEndSession}>
+            리허설 종료
+          </button>
+        )}
       </div>
 
       <div className={`rehearsal-toast${toast ? ' rehearsal-toast--visible' : ''}`} role="status">
