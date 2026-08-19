@@ -19,7 +19,7 @@ from rest_framework.exceptions import APIException
 
 logger = logging.getLogger(__name__)
 
-GROQ_MODEL_NAME = getattr(settings, "GROQ_MODEL_NAME", "llama-3.3-70b-versatile")
+GROQ_MODEL_NAME = getattr(settings, "GROQ_MODEL_NAME", "openai/gpt-oss-120b")
 GROQ_TIMEOUT_SECONDS = getattr(settings, "GROQ_TIMEOUT_SECONDS", 12)
 
 LANGUAGE_NAMES = {"de": "독일어", "ja": "일본어", "zh": "중국어", "en": "영어"}
