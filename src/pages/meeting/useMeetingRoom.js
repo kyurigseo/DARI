@@ -40,6 +40,9 @@ export function useMeetingRoom(roomCode) {
   const localStreamRef = useRef(null)
   const meRef = useRef(null)
   const mediaRecorderRef = useRef(null)
+  const audioStreamRef = useRef(null)
+  const audioStreamingActiveRef = useRef(false)
+  const audioChunkTimerRef = useRef(null)
   const cameraTrackRef = useRef(null)
   const screenTrackRef = useRef(null)
   const toastTimerRef = useRef(null)
@@ -188,23 +191,63 @@ export function useMeetingRoom(roomCode) {
   )
 
   // 오디오를 잘게 잘라 서버로 전송 -> STT/번역 파이프라인이 자막을 생성
-  const startAudioStreaming = useCallback((stream) => {
-    if (!stream.getAudioTracks().length) return
+  //
+  // 주의: MediaRecorder.start(timeslice)로 만든 청크는 첫 조각에만 WebM 헤더가 있고
+  // 이후 조각들은 헤더 없는 continuation cluster라 단독으로는 디코딩이 안 된다.
+  // 백엔드가 각 청크를 1:1로 즉시 Whisper에 넘기도록 바뀌었으므로, 매번 완전한
+  // WebM 헤더를 가진 독립 파일이 되도록 recorder를 주기적으로 stop() 후 다시
+  // start()해서 청크를 만든다.
+  const AUDIO_CHUNK_MS = 3500
+
+  const recordNextAudioChunk = useCallback(() => {
+    if (!audioStreamingActiveRef.current || !audioStreamRef.current) return
     try {
-      const audioOnlyStream = new MediaStream(stream.getAudioTracks())
-      const recorder = new MediaRecorder(audioOnlyStream, { mimeType: 'audio/webm;codecs=opus' })
+      const recorder = new MediaRecorder(audioStreamRef.current, { mimeType: 'audio/webm;codecs=opus' })
+
       recorder.ondataavailable = async (event) => {
         if (event.data && event.data.size > 0 && socketRef.current?.isOpen) {
           const buffer = await event.data.arrayBuffer()
           socketRef.current.sendBytes(buffer)
         }
       }
-      recorder.start(3000) // 3초 단위로 청크 전송
+
+      recorder.onstop = () => {
+        // 아직 스트리밍 중이면 곧바로 다음 독립 청크 녹음을 시작한다.
+        if (audioStreamingActiveRef.current) recordNextAudioChunk()
+      }
+
+      recorder.start()
       mediaRecorderRef.current = recorder
+
+      audioChunkTimerRef.current = setTimeout(() => {
+        if (recorder.state !== 'inactive') recorder.stop()
+      }, AUDIO_CHUNK_MS)
     } catch (err) {
       // MediaRecorder 미지원 브라우저 등 - 자막 없이 화상/음성은 정상 동작
       console.warn('오디오 스트리밍을 시작하지 못했습니다.', err)
     }
+  }, [])
+
+  const startAudioStreaming = useCallback(
+    (stream) => {
+      if (!stream.getAudioTracks().length) return
+      audioStreamRef.current = new MediaStream(stream.getAudioTracks())
+      audioStreamingActiveRef.current = true
+      recordNextAudioChunk()
+    },
+    [recordNextAudioChunk],
+  )
+
+  const stopAudioStreaming = useCallback(() => {
+    audioStreamingActiveRef.current = false
+    clearTimeout(audioChunkTimerRef.current)
+    audioChunkTimerRef.current = null
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = null
+      mediaRecorderRef.current.stop()
+    }
+    mediaRecorderRef.current = null
+    audioStreamRef.current = null
   }, [])
 
   const handleSocketMessage = useCallback(
@@ -301,8 +344,7 @@ export function useMeetingRoom(roomCode) {
   )
 
   const cleanupCall = useCallback(() => {
-    mediaRecorderRef.current?.stop()
-    mediaRecorderRef.current = null
+    stopAudioStreaming()
 
     localStreamRef.current?.getTracks().forEach((track) => track.stop())
     if (screenTrackRef.current) {
@@ -324,7 +366,7 @@ export function useMeetingRoom(roomCode) {
 
     setParticipants([])
     setCaptions([])
-  }, [])
+  }, [stopAudioStreaming])
 
   const join = useCallback(async () => {
     if (!roomCode || connecting || joined) return
