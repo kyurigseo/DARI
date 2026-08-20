@@ -1,0 +1,122 @@
+# ===== Python / Django (backend/) =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 가상환경
+venv/
+env/
+ENV/
+.venv/
+.env/
+env.bak/
+venv.bak/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static_root/
+/backend/staticfiles/
+/backend/media/
+
+# 환경변수 / 시크릿 (.env, INTERNAL_SERVICE_TOKEN, SECRET_KEY 등)
+.env
+.env.*
+.env.example
+!.env.example
+*.pem
+*.key
+secrets.json
+
+# 테스트/커버리지/타입체크 캐시
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Celery (혹시 나중에 도입 시)
+celerybeat-schedule
+celerybeat.pid
+
+# ===== Node / React (frontend/) =====
+node_modules/
+.pnp/
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+yarn.lock.bak
+
+# 빌드 산출물
+/frontend/build/
+/frontend/dist/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vite/
+coverage/
+
+# ===== IDE / 에디터 =====
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.history/
+
+# ===== OS =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===== 기타 =====
+*.bak
+*.tmp
+*.orig
+.claude/settings.local.json
+.turbo/
+docker-compose.override.yml
+
+CLAUDE.md
+api.md
+

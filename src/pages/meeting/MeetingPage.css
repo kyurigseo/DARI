@@ -1,0 +1,723 @@
+.meeting-page__heading {
+  margin-bottom: 20px;
+}
+
+.meeting-page__heading h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.meeting-page__heading p {
+  margin: 0;
+  color: #6B7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.meeting-layout {
+  display: flex;
+  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* ---------- call stage ---------- */
+
+.call-stage {
+  width: 856px;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  background: #12141f;
+  border-radius: 16px;
+  box-sizing: border-box; /* 패딩을 넣어도 전체 856px 크기가 유지되도록 추가 */
+}
+
+/* 회의 참여 중일 때의 크기 */
+.call-stage:not(.call-stage--prejoin) {
+  height: 734px;
+  padding: 24px; /* 영상통화 화면 안쪽 여백 추가 (원하시면 수치를 조절하세요) */
+}
+
+/* 대기 화면일 때의 크기 (원래대로 작게 유지) */
+.call-stage--prejoin {
+  height: 340px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- pre-join ---------- */
+
+.prejoin-preview {
+  width: 221.33px;
+  height: 138.67px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #1b1e2c;
+  border-radius: 14px;
+
+  margin-top: 41px;
+}
+
+.prejoin-preview__avatar {
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--color-primary);
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 18px;
+
+}
+
+.prejoin-preview__label {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  background: rgb(0 0 0 / 50%);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.prejoin-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.toggle-btn {
+  width: 106px;
+  height: 38px;
+  
+  color: #fff;
+  background-color: #333A52;
+  border: none;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+
+  margin-top: 26px;
+  margin-bottom: 18px;
+}
+
+.toggle-btn.is-on {
+  border-color: var(--color-primary);
+}
+
+.join-btn {
+  width: 141px;
+  height: 45px;
+  
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+
+  margin-bottom: 41px;
+}
+
+.join-btn:hover {
+  background: var(--color-primary-dark);
+}
+
+/* ---------- video grid ---------- */
+
+.video-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  flex: 1;
+}
+
+.video-tile {
+  min-height: 132px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1b1e2c;
+  border: 2px solid transparent;
+  border-radius: 12px;
+}
+
+.video-tile--speaking {
+  border-color: #12b8a6;
+}
+
+.video-tile__badge {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  padding: 2px 8px;
+  background: rgb(0 0 0 / 50%);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.video-tile__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #000;
+}
+
+.video-tile__avatar {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.video-tile__footer {
+  position: absolute;
+  bottom: 9px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: rgb(0 0 0 / 45%);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.video-tile__speaking {
+  color: #12b8a6;
+}
+
+.video-tile__icon.is-muted {
+  opacity: 0.6;
+}
+
+/* ---------- caption bar ---------- */
+
+.caption-bar {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* 원문과 번역 사이 간격 */
+}
+
+.caption-bar__original {
+  margin: 0;
+  padding: 10px 14px;
+  background: #1b1e2c; /* 원문은 기존처럼 어두운 배경 */
+  color: rgb(255 255 255 / 60%);
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.caption-bar__translated {
+  margin: 0;
+  padding: 10px 14px;
+  background: #ffffff; /* 번역 부분 흰색 배경 */
+  color: #1b1e2c;      /* 배경이 밝으므로 글자는 진한 색상으로 변경 */
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ---------- toolbar ---------- */
+
+.call-toolbar {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.toolbar-btn {
+  padding: 9px 14px;
+  color: #fff;
+  background: #1b1e2c;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.toolbar-btn.is-active {
+  background: var(--color-primary);
+}
+
+.toolbar-btn--danger {
+  margin-left: auto;
+  background: var(--color-danger);
+}
+
+/* ---------- waiting card ---------- */
+
+.waiting-card {
+  width: 250px;
+  height: 170px;
+
+  padding: 20px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  
+}
+
+.waiting-card__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.waiting-card__subtitle {
+  margin: 0 0 14px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.waiting-card__list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  list-style: none;
+  font-size: 13px;
+}
+
+
+
+.waiting-card__meta {
+  color: var(--color-muted);
+}
+
+/* ---------- meeting side panel ---------- */
+
+.meeting-panel {
+  width: 250px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.meeting-panel__tabs {
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  background: var(--color-background);
+  border-radius: 10px;
+}
+
+.meeting-panel__tab {
+  padding: 8px 6px;
+  color: #6b7280;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.meeting-panel__tab.is-active {
+  color: #1b1f2a;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  font-weight: 700;
+}
+
+.tab-panel__label {
+  display: block;
+  margin-bottom: 10px;
+  color: #444a57;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* subtitle / translate tab */
+
+.lang-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.lang-btn {
+  padding: 7px 14px;
+  color: #444a57;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.lang-btn.is-selected {
+  color: #fff;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.live-subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch {
+  width: 40px;
+  height: 22px;
+  position: relative;
+  padding: 0;
+  background: #d8d9e3;
+  border: 0;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.switch.is-on {
+  background: var(--color-primary);
+}
+
+.switch__knob {
+  width: 16px;
+  height: 16px;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+
+.switch.is-on .switch__knob {
+  transform: translateX(18px);
+}
+
+/* speech card tab */
+
+.mtg-speech-card-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+}
+
+.mtg-speech-card {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.mtg-speech-card__situation {
+  margin: 0 0 7px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6B7280;
+  font-size: 11px;
+}
+
+.mtg-speech-card__situation img {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.mtg-speech-card__korean {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mtg-speech-card__translated {
+  margin: 0 0 11px;
+  color: var(--color-muted);
+  font-size: 12.5px;
+}
+
+.mtg-speech-card__btn {
+  width: 100%;
+  padding: 8px;
+  color: #8B5CF6;
+  background: #F1ECFC;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  
+  font-weight: 700;
+}
+
+.mtg-speech-card__btn:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* participants tab */
+
+.participant-list {
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+}
+
+.participant-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.participant-row__avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 12.5px;
+}
+
+.participant-row__info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.participant-row__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.host-badge {
+  padding: 2px 7px;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.participant-row__time {
+  color: var(--color-muted);
+  font-size: 11.5px;
+}
+
+.participant-row__icon {
+  font-size: 14px;
+}
+
+.participant-row__icon.is-muted {
+  opacity: 0.45;
+}
+
+.participant-row__remove {
+  padding: 0 3px;
+  color: var(--color-muted);
+  background: transparent;
+  border: 0;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.invite-row {
+  display: flex;
+  gap: 8px;
+}
+
+.invite-input {
+  min-width: 0;
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.invite-input:focus {
+  outline: 0;
+  border-color: var(--color-primary);
+}
+
+.invite-btn {
+  padding: 9px 15px;
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.invite-btn:hover {
+  background: var(--color-primary-dark);
+}
+
+/* chat tab */
+
+.tab-panel--chat {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-list {
+  max-height: 260px;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.chat-message {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chat-message__sender {
+  font-weight: 700;
+}
+
+.chat-composer {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-composer input {
+  min-width: 0;
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.chat-composer input:focus {
+  outline: 0;
+  border-color: var(--color-primary);
+}
+
+.chat-composer button {
+  padding: 9px 15px;
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-composer button:hover {
+  background: var(--color-primary-dark);
+}
+
+/* toast */
+
+.meeting-toast {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  z-index: 40;
+  padding: 12px 20px;
+  color: #fff;
+  background: #1b1f2a;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 14px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.meeting-toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 900px) {
+  .meeting-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .call-toolbar {
+    justify-content: center;
+  }
+
+  .toolbar-btn--danger {
+    margin-left: 0;
+  }
+}
+/* ---------- 실시간 연동 관련 추가 스타일 ---------- */
+.meeting-page__error {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgb(224 84 107 / 12%);
+  color: #e0546b;
+  font-size: 13px;
+}
+
+.caption-history {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.caption-history__item {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.tab-panel__empty {
+  font-size: 13px;
+  color: var(--color-text-secondary, #6b7280);
+}
