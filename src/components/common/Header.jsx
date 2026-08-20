@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMyPage } from '../../api/auth'
 import dariLogo from '../../assets/img/logo/dari_logo.svg'
+import NotificationBell from './NotificationBell'
 import './Header.css'
 
 function Header({ onMenuClick }) {
@@ -51,6 +52,7 @@ function Header({ onMenuClick }) {
           <span aria-hidden="true">📅</span>
           <span>14:00 · Acme Corp 협상</span>
         </Link> */}
+        <NotificationBell />
         <Link className="header__profile" to="/mypage" aria-label="마이페이지">
           {profile?.profileImage ? (
             <img className="header__profile-image" src={profile.profileImage} alt="" />

@@ -53,12 +53,15 @@ function CreateMeetingModal({ onClose }) {
   const titleId = useId()
   const dateId = useId()
   const timeId = useId()
+  const participantId = useId()
   const errorId = useId()
   const titleInputRef = useRef(null)
   const [title, setTitle] = useState('')
   const [date, setDate] = useState(initialDateTime.current.date)
   const [time, setTime] = useState(initialDateTime.current.time)
   const [selectedQuickTime, setSelectedQuickTime] = useState(null)
+  const [participantInput, setParticipantInput] = useState('')
+  const [participants, setParticipants] = useState([])
   const [error, setError] = useState('')
   const [isCreating, setIsCreating] = useState(false)
 
@@ -87,6 +90,26 @@ function CreateMeetingModal({ onClose }) {
     setError('')
   }
 
+  const addParticipant = () => {
+    const trimmed = participantInput.trim()
+    if (!trimmed || participants.includes(trimmed)) {
+      setParticipantInput('')
+      return
+    }
+    setParticipants((current) => [...current, trimmed])
+    setParticipantInput('')
+  }
+
+  const removeParticipant = (username) => {
+    setParticipants((current) => current.filter((name) => name !== username))
+  }
+
+  const handleParticipantKeyDown = (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    addParticipant()
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (isCreating) return
@@ -106,19 +129,26 @@ function CreateMeetingModal({ onClose }) {
     setIsCreating(true)
 
     try {
-      // Meeting API가 일정 필드를 지원하기 전까지 선택한 날짜/시간은 UI state로만 관리한다.
       const createdMeeting = await createMeeting({
         title: trimmedTitle,
         room_code: createRoomCode(),
+        scheduled_start_time: `${date}T${time}:00`,
+        participants,
       })
       if (!createdMeeting?.room_code) {
         throw new Error('Created meeting has no room_code')
       }
 
-      // TODO: 일정 API가 Meeting과 연결되면 Home 목록/Header 일정 badge를 갱신한다.
       navigate(`/meeting/${createdMeeting.room_code}`)
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError))
+      // 존재하지 않는 참가자 username은 백엔드가 404 + { error, username }으로 응답하므로
+      // 어떤 이름이 문제인지 알 수 있게 별도로 처리한다.
+      const invalidUsername = requestError?.response?.data?.username
+      setError(
+        invalidUsername
+          ? `존재하지 않는 사용자: ${invalidUsername}`
+          : getApiErrorMessage(requestError)
+      )
       setIsCreating(false)
     }
   }
@@ -208,9 +238,45 @@ function CreateMeetingModal({ onClose }) {
             </div>
           </fieldset>
 
-          <p className="create-meeting-modal__guide">
-            회의를 만든 뒤, 회의실 안에서 참가자를 초대할 수 있어요
-          </p>
+          <div className="create-meeting-modal__participants">
+            <label htmlFor={participantId}>참가자 초대 (선택)</label>
+            <div className="create-meeting-modal__participant-row">
+              <input
+                id={participantId}
+                type="text"
+                value={participantInput}
+                placeholder="이름 입력 후 추가"
+                onChange={(event) => setParticipantInput(event.target.value)}
+                onKeyDown={handleParticipantKeyDown}
+              />
+              <button
+                type="button"
+                className="create-meeting-modal__add-button"
+                onClick={addParticipant}
+              >
+                추가
+              </button>
+            </div>
+            {participants.length > 0 && (
+              <div className="create-meeting-modal__chips">
+                {participants.map((username) => (
+                  <span className="create-meeting-modal__chip" key={username}>
+                    {username}
+                    <button
+                      type="button"
+                      className="create-meeting-modal__chip-remove"
+                      aria-label={`${username} 삭제`}
+                      onClick={() => removeParticipant(username)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <p className="create-meeting-modal__guide">참가자에게 초대 알림이 전송돼요</p>
           {error && (
             <p className="create-meeting-modal__error" id={errorId} role="alert">
               {error}
