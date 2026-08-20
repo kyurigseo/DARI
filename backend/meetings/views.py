@@ -162,32 +162,80 @@ class ParticipantManageView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, room_code):
-        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        meeting = get_object_or_404(
+            MeetingSession,
+            room_code=room_code
+        )
+
         participants = meeting.participants.filter(is_active=True)
-        return Response(ParticipantSerializer(participants, many=True).data)
+
+        return Response(
+            ParticipantSerializer(participants, many=True).data
+        )
 
     def post(self, request, room_code):
         """사용자 초대 API"""
-        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+
+        meeting = get_object_or_404(
+            MeetingSession,
+            room_code=room_code
+        )
+
+        if meeting.host != request.user:
+            return Response(
+                {'error': '참여자를 초대할 권한이 없습니다.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         username = request.data.get('username')
 
-        invited_user = User.objects.filter(username=username).first()
+        if not username:
+            return Response(
+                {'error': '초대할 사용자의 username을 입력해주세요.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        invited_user = User.objects.filter(
+            username=username
+        ).first()
+
         if not invited_user:
-            return Response({'error': '존재하지 않는 사용자입니다.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': '존재하지 않는 사용자입니다.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if invited_user == request.user:
+            return Response(
+                {'error': '회의 호스트 본인은 초대할 수 없습니다.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         participant, created = MeetingParticipant.objects.get_or_create(
             meeting=meeting,
             user=invited_user,
-            defaults={'is_host': False}
+            defaults={
+                'is_host': False,
+                'status': 'PENDING',
+                'is_active': False,
+            }
         )
-        if not participant.is_active:
-            participant.is_active = True
-            participant.save(update_fields=['is_active'])
-        return Response({
-            'message': f'{username} 님을 회의에 초대했습니다.',
-            'participant': ParticipantSerializer(participant).data,
-        }, status=status.HTTP_200_OK)
 
+        if not created:
+            participant.status = 'PENDING'
+            participant.is_active = False
+
+            participant.save(
+                update_fields=['status', 'is_active']
+            )
+
+        return Response(
+            {
+                'message': f'{username} 님을 회의에 초대했습니다.',
+                'participant': ParticipantSerializer(participant).data,
+            },
+            status=status.HTTP_200_OK
+        )
 
 class KickParticipantView(APIView):
     """호스트 권한 참가자 내보내기 API"""
@@ -446,17 +494,31 @@ class MeetingEmailSendView(APIView):
 class HomeMeetingListView(APIView):
     """
     [홈 화면 API]
+
+    사용자가 호스트인 회의 또는
+    초대를 수락한 회의만 예정된 회의 목록에 반환
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         meetings = MeetingSession.objects.filter(
-            (models.Q(host=request.user) | models.Q(participants__user=request.user)),
+            models.Q(host=request.user) |
+            models.Q(
+                participants__user=request.user,
+                participants__status='ACCEPTED'
+            ),
             status='WAITING'
         ).distinct().order_by('-created_at')
 
-        serializer = MeetingSessionSerializer(meetings, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        serializer = MeetingSessionSerializer(
+            meetings,
+            many=True
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
 
 class InvitationListView(APIView):
     """
@@ -487,19 +549,59 @@ class RespondInvitationView(APIView):
     def post(self, request, meeting_id):
         action = request.data.get('action')
 
-        participant = get_object_or_404(MeetingParticipant, meeting_id=meeting_id, user=request.user)
+        participant = get_object_or_404(
+            MeetingParticipant,
+            meeting_id=meeting_id,
+            user=request.user
+        )
+        if participant.status != 'PENDING':
+            return Response(
+                {
+                    'error': '이미 처리된 초대입니다.',
+                    'status': participant.status
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if action == 'accept':
             participant.status = 'ACCEPTED'
             participant.is_active = True
-            participant.save(update_fields=['status', 'is_active'])
-            return Response({'message': '회의 참가가 수락되었습니다.'}, status=status.HTTP_200_OK)
+
+            participant.save(
+                update_fields=['status', 'is_active']
+            )
+
+            return Response(
+                {
+                    'message': '회의 참가가 수락되었습니다.',
+                    'status': 'ACCEPTED',
+                    'meeting_id': str(participant.meeting.id),
+                    'room_code': participant.meeting.room_code,
+                },
+                status=status.HTTP_200_OK
+            )
 
         elif action == 'reject':
             participant.status = 'REJECTED'
             participant.is_active = False
-            participant.save(update_fields=['status', 'is_active'])
-            return Response({'message': '회의 로그가 거절되었습니다.'}, status=status.HTTP_200_OK)
+
+            participant.save(
+                update_fields=['status', 'is_active']
+            )
+
+            return Response(
+                {
+                    'message': '회의 초대를 거절했습니다.',
+                    'status': 'REJECTED',
+                },
+                status=status.HTTP_200_OK
+            )
 
         else:
-            return Response({'error': '올바르지 않은 요청입니다. (action: accept/reject 필요)'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    'error': '올바르지 않은 요청입니다. '
+                             '(action: accept/reject 필요)'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
