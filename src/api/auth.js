@@ -31,10 +31,10 @@ export async function getMyPage() {
 }
 
 export async function updateMyPage(payload) {
-  const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData
-  const { data } = await apiClient.patch('/auth/mypage/', payload, {
-    headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined,
-  })
+  // FormData(이미지 포함)인 경우 Content-Type을 직접 지정하지 않는다.
+  // 직접 'multipart/form-data'를 세팅하면 boundary가 빠져 백엔드 파싱이 깨질 수 있으므로,
+  // axios/브라우저가 boundary를 포함해 자동으로 채우도록 둔다.
+  const { data } = await apiClient.patch('/auth/mypage/', payload)
   return data
 }
 
