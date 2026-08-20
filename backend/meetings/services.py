@@ -27,7 +27,6 @@ class AIServicePipeline:
        """
        api_key = getattr(settings, 'OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
 
-       # ✨ 수정 1: 프론트에서 온 데이터 크기 확인용 로그 추가, 1000 -> 100으로 제한 완화
        print(f"🎤 [STT] 수신된 오디오 크기: {len(audio_bytes)} 바이트")
        if not api_key or len(audio_bytes) < 100:
            print("⚠️ [STT 무시됨] 키가 없거나 데이터가 너무 짧습니다.")
@@ -36,7 +35,6 @@ class AIServicePipeline:
        url = "https://api.openai.com/v1/audio/transcriptions"
        headers = {"Authorization": f"Bearer {api_key}"}
 
-       # 브라우저 MediaRecorder는 기본적으로 webm/opus 컨테이너로 청크를 만들어 보낸다.
        audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
        files = {"file": audio_file}
        data = {"model": "whisper-1"}
@@ -44,10 +42,15 @@ class AIServicePipeline:
        try:
            async with httpx.AsyncClient(timeout=10.0) as client:
                response = await client.post(url, headers=headers, files=files, data=data)
-               if response.status_code == 200:
-                   return response.json().get("text", "").strip()
+                if response.status_code == 200:
+                    text = response.json().get("text", "").strip()
+                    hallucinations = ["당신", "당신.", "you", "you.", "감사합니다", "감사합니다.", "시청해 주셔서 감사합니다."]
+                    if text.lower() in hallucinations:
+                        print("⚠️ [STT 환각 제거됨] 침묵 또는 노이즈")
+                        return ""
+
+                    return text
                else:
-                   # ✨ 수정 2: OpenAI가 거절했을 때 정확한 이유를 알기 위해 로그 추가
                    print(f"❌ [STT 실패] 상태코드: {response.status_code}, 상세: {response.text}")
        except Exception as e:
            print(f"[STT 오류] {e}")
