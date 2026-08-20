@@ -61,13 +61,33 @@ def _call_external_service(base_url_setting, path, timeout=2):
         raise UpstreamUnavailable(str(exc)) from exc
 
 
+def _map_meeting_session(item):
+    """meetings.MeetingSessionSerializer 응답 -> home의 today_meetings 항목 계약으로 변환."""
+    start = item["created_at"]
+    parsed_start = _parse_iso(start)
+    end = (parsed_start + timedelta(hours=1)).isoformat() if parsed_start else start
+    participant_count = sum(1 for p in item.get("participants", []) if p.get("is_active"))
+
+    return {
+        "meeting_id": item["id"],
+        "room_code": item["room_code"],
+        "title": item["title"],
+        "start_time": start,
+        "end_time": end,
+        "participant_count": participant_count,
+        "join_url": f"/meeting/{item['room_code']}",
+    }
+
+
 def fetch_today_meetings(request):
     """
-    meetings 앱의 "오늘 예정 회의 리스트" API 호출.
-    제안 스펙: GET {MEETINGS_BASE_URL}/internal/meetings/today/?user_id=<uuid>
-              Authorization: Internal <INTERNAL_SERVICE_TOKEN>
-              -> [{meeting_id, title, start_time, end_time, participant_count, join_url}]
-    (아직 meetings 앱이 없어 항상 목업으로 폴백됨)
+    meetings 앱의 홈 화면 전용 API(GET /api/meetings/home/, HomeMeetingListView)를 호출해
+    참여 예정/대기 중(WAITING)인 회의 목록을 가져온다. meetings는 home과 같은 프로세스에서
+    도는 앱이라 _call_internal_app으로 호출하고, 응답의 MeetingSessionSerializer 필드
+    (id/room_code/title/created_at/participants)를 home 계약(meeting_id/room_code/title/
+    start_time/end_time/participant_count/join_url)으로 변환한다.
+    meetings에는 아직 별도 예정 시각 필드가 없어 created_at을 start_time으로 쓰고
+    end_time은 1시간 뒤로 가정한다(데모 모드 분기와 동일한 방식).
     """
     if settings.DARI_DEMO_MODE:
         # Demo meetings are real rows created by seed_demo_data. The meeting
@@ -99,13 +119,10 @@ def fetch_today_meetings(request):
         return {"count": len(results), "results": results, "source": "demo"}
 
     try:
-        raw = _call_external_service(
-            "MEETINGS_BASE_URL",
-            f"/internal/meetings/today/?user_id={request.user.id}",
-        )
-        meetings = raw.get("results", raw) if isinstance(raw, dict) else raw
+        raw = _call_internal_app("/api/meetings/home/", request)
+        meetings = [_map_meeting_session(item) for item in raw]
         source = "live"
-    except UpstreamUnavailable:
+    except Exception:
         meetings = mocks.MOCK_TODAY_MEETINGS
         source = "mock"
 
@@ -138,9 +155,9 @@ def fetch_cards_summary(request):
 
 def fetch_tracker_alert(request):
     """
-    제안 스펙(신규): GET /api/v1/tracker/alerts/latest/ (JWT 인증)
+    tracker.AlertsLatestView(GET /api/v1/tracker/alerts/latest/, JWT 인증)를 호출.
     -> {has_alert, message, recurring_meeting_id}
-    tracker 앱 담당자 확인 후 구현 필요. 그 전까지는 항상 목업.
+    엔드포인트는 이미 구현되어 있음(tracker/views.py). 실패 시에만 목업 폴백.
     """
     try:
         data = _call_internal_app("/api/v1/tracker/alerts/latest/", request)
@@ -164,9 +181,9 @@ def fetch_latest_summary(request):
 
 def fetch_rehearsal_continue(request):
     """
-    제안 스펙(신규): GET /api/v1/rehearsal/sessions/latest/ (JWT 인증)
+    rehearsal.LatestSessionView(GET /api/v1/rehearsal/sessions/latest/, JWT 인증)를 호출.
     -> {available, session_id, persona_name, last_message_preview, updated_at}
-    rehearsal 앱 담당자 확인 후 구현 필요. 그 전까지는 항상 목업.
+    엔드포인트는 이미 구현되어 있음(rehearsal/views.py). 실패 시에만 목업 폴백.
     """
     try:
         data = _call_internal_app("/api/v1/rehearsal/sessions/latest/", request)
