@@ -9,6 +9,7 @@ class MeetingConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.audio_buffer = bytearray()
+        self.audio_chunk_count = 0
 
     async def connect(self):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
@@ -37,39 +38,41 @@ class MeetingConsumer(AsyncWebsocketConsumer):
             }
         )
 
-    async def disconnect(self, close_code):
-        await self.set_participant_active_status(False)
+    async def receive_bytes(self, bytes_data):
+        audio_size = len(bytes_data)
+
+        print(f"🎤 [STT 요청] {audio_size} 바이트 수신")
+
+        # 너무 짧은 오디오 chunk는 STT에 보내지 않음
+        if audio_size < 1000:
+            print("⚠️ [STT 무시] 오디오 데이터가 너무 짧음")
+            return
+
+        original_text = await AIServicePipeline.process_stt(bytes_data)
+
+        if not original_text:
+            return
+
+        print(f"📝 [STT 결과] {original_text}")
+
+        target_langs = ['KO', 'EN-US', 'JA', 'ZH', 'DE']
+        translations = await AIServicePipeline.process_translation(
+            original_text,
+            target_langs
+        )
+
+        await self.save_transcript(original_text, translations)
+
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type': 'user_left',
-                'user_id': self.user.id,
-                'username': self.user.username,
+                'type': 'subtitle_broadcast',
+                'speaker_id': self.user.id,
+                'speaker_name': self.user.username,
+                'original_text': original_text,
+                'translations': translations
             }
         )
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-
-    async def receive_bytes(self, bytes_data):
-        print(f"🎤 [STT 요청] {len(bytes_data)} 바이트 수신, 즉시 처리 시작")
-        original_text = await AIServicePipeline.process_stt(bytes_data)
-
-        if original_text:
-            print(f"📝 [STT 결과] {original_text}")
-            target_langs = ['KO', 'EN-US', 'JA', 'ZH', 'DE']
-            translations = await AIServicePipeline.process_translation(original_text, target_langs)
-
-            await self.save_transcript(original_text, translations)
-
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'subtitle_broadcast',
-                    'speaker_id': self.user.id,
-                    'speaker_name': self.user.username,
-                    'original_text': original_text,
-                    'translations': translations
-                }
-            )
 
     async def receive(self, text_data=None, bytes_data=None):
         if bytes_data is not None:

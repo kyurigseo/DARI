@@ -19,43 +19,92 @@ class AIServicePipeline:
     @staticmethod
     async def process_stt(audio_bytes: bytes) -> str:
         """
-        [STT 파이프라인] 음성 바이너리 데이터를 OpenAI Whisper API 등으로 전달하여 텍스트 추출
-        """
-        api_key = getattr(settings, 'OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
+        [STT 파이프라인]
 
-        print(f"🎤 [STT] 수신된 오디오 크기: {len(audio_bytes)} 바이트")
-        if not api_key or len(audio_bytes) < 100:
-            print("⚠️ [STT 무시됨] 키가 없거나 데이터가 너무 짧습니다.")
+        WebSocket으로 누적된 오디오를 Whisper에 전달한다.
+        무음/노이즈에서 발생하는 대표적인 Whisper hallucination은
+        자막으로 저장하거나 broadcast하지 않는다.
+        """
+
+        api_key = getattr(
+            settings,
+            'OPENAI_API_KEY',
+            os.getenv('OPENAI_API_KEY', '')
+        )
+
+        audio_size = len(audio_bytes)
+
+        print(f"🎤 [STT] 수신된 오디오 크기: {audio_size} bytes")
+
+        if not api_key:
+            print("⚠️ [STT 무시됨] OPENAI_API_KEY가 없습니다.")
+            return ""
+
+        if audio_size < 4000:
+            print("⚠️ [STT 무시됨] 오디오 데이터가 너무 작습니다.")
             return ""
 
         url = "https://api.openai.com/v1/audio/transcriptions"
-        headers = {"Authorization": f"Bearer {api_key}"}
 
-        audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
-        files = {"file": audio_file}
-        data = {"model": "whisper-1"}
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        audio_file = (
+            "audio.webm",
+            io.BytesIO(audio_bytes),
+            "audio/webm"
+        )
+
+        files = {
+            "file": audio_file
+        }
+
+        data = {
+            "model": "whisper-1"
+        }
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, headers=headers, files=files, data=data)
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    files=files,
+                    data=data
+                )
 
-                if response.status_code == 200:
-                    text = response.json().get("text", "").strip()
+            if response.status_code != 200:
+                print(
+                    f"❌ [STT 실패] "
+                    f"상태코드: {response.status_code}, "
+                    f"상세: {response.text}"
+                )
+                return ""
 
-                    hallucinations = ["당신", "당신.", "you", "you.", "감사합니다", "감사합니다.", "시청해 주셔서 감사합니다."]
-                    if text.lower() in hallucinations:
-                        print("⚠️ [STT 환각 제거됨] 침묵 또는 노이즈")
-                        return ""
+            text = response.json().get("text", "").strip()
 
-                    return text
+            if not text:
+                return ""
 
-                else:
-                    print(f"❌ [STT 실패] 상태코드: {response.status_code}, 상세: {response.text}")
-        except Exception as e:
-            print(f"[STT 오류] {e}")
+            hallucinations = {
+                "당신",
+                "당신.",
+                "you",
+                "you.",
+                "thank you",
+                "thank you.",
+                "감사합니다",
+                "감사합니다.",
+                "시청해 주셔서 감사합니다.",
+                "시청해주셔서 감사합니다.",
+                "구독과 좋아요 부탁드립니다.",
+            }
 
-        return ""
+            if text.lower() in {value.lower() for value in hallucinations}:
+                print(f"⚠️ [STT 환각 제거됨] {text}")
+                return ""
 
+            return text
 
     @staticmethod
     async def process_translation(text: str, target_langs: list) -> dict:
