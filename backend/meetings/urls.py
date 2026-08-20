@@ -36,7 +36,8 @@ urlpatterns = [
     path('<str:room_code>/send-email/', MeetingEmailSendView.as_view(), name='meeting-send-email'),
     path('home/', HomeMeetingListView.as_view(), name='home-meetings'),
     path('invitations/', InvitationListView.as_view(), name='invitation-list'),
-    path('invitations/<int:meeting_id>/respond/', RespondInvitationView.as_view(), name='respond-invitation'),
-
+    path('invitations/<uuid:meeting_id>/respond/',
+    RespondInvitationView.as_view(),
+    name='respond-invitation'),
 
 ]

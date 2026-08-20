@@ -2,7 +2,7 @@
 import threading
 import urllib.parse
 import uuid
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from rest_framework import status, generics
 from rest_framework.views import APIView
@@ -52,16 +52,82 @@ class CreateMeetingView(APIView):
         while MeetingSession.objects.filter(room_code=room_code).exists():
             room_code = str(uuid.uuid4())[:8]
 
-        try:
-            meeting = MeetingSession.objects.create(
-                room_code=room_code,
-                title=title,
-                host=request.user,
+        participant_usernames = request.data.get('participants', [])
+
+        if participant_usernames is None:
+            participant_usernames = []
+
+        if not isinstance(participant_usernames, list):
+            return Response(
+                {'error': 'participants는 사용자 username 목록이어야 합니다.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            return Response(MeetingSessionSerializer(meeting).data, status=status.HTTP_201_CREATED)
+
+        participant_usernames = list(dict.fromkeys(
+            str(username).strip()
+            for username in participant_usernames
+            if str(username).strip()
+        ))
+
+        invited_users = []
+
+        for username in participant_usernames:
+            invited_user = User.objects.filter(username=username).first()
+
+            if not invited_user:
+                return Response(
+                    {
+                        'error': f'존재하지 않는 사용자입니다: {username}',
+                        'username': username
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            if invited_user == request.user:
+                return Response(
+                    {'error': '회의 호스트 본인은 참가자로 초대할 수 없습니다.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            invited_users.append(invited_user)
+
+        try:
+            with transaction.atomic():
+                meeting = MeetingSession.objects.create(
+                    room_code=room_code,
+                    title=title,
+                    host=request.user,
+                )
+
+                participants = []
+
+                for invited_user in invited_users:
+                    participant = MeetingParticipant.objects.create(
+                        meeting=meeting,
+                        user=invited_user,
+                        is_host=False,
+                        status='PENDING',
+                        is_active=False,
+                    )
+                    participants.append(participant)
+
+            return Response(
+                {
+                    **MeetingSessionSerializer(meeting).data,
+                    'invited_participants': ParticipantSerializer(
+                        participants,
+                        many=True
+                    ).data,
+                },
+                status=status.HTTP_201_CREATED
+            )
+
         except Exception as e:
             print(f"🔥 회의 생성 중 에러 발생: {str(e)}")
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class PrejoinView(APIView):
     permission_classes = [IsAuthenticated]
