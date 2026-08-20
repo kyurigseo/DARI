@@ -1,5 +1,3 @@
-# STT 및 번역 서비스 구현
-
 import io
 import os
 import httpx
@@ -17,48 +15,46 @@ LANGUAGE_MAPPING = {
     'Deutsch': 'DE',
 }
 
-
-
 class AIServicePipeline:
     @staticmethod
-        async def process_stt(audio_bytes: bytes) -> str:
-            """
-            [STT 파이프라인] 음성 바이너리 데이터를 OpenAI Whisper API 등으로 전달하여 텍스트 추출
-            """
-            api_key = getattr(settings, 'OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
+    async def process_stt(audio_bytes: bytes) -> str:
+        """
+        [STT 파이프라인] 음성 바이너리 데이터를 OpenAI Whisper API 등으로 전달하여 텍스트 추출
+        """
+        api_key = getattr(settings, 'OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
 
-            print(f"🎤 [STT] 수신된 오디오 크기: {len(audio_bytes)} 바이트")
-            if not api_key or len(audio_bytes) < 100:
-                print("⚠️ [STT 무시됨] 키가 없거나 데이터가 너무 짧습니다.")
-                return ""
-
-            url = "https://api.openai.com/v1/audio/transcriptions"
-            headers = {"Authorization": f"Bearer {api_key}"}
-
-            audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
-            files = {"file": audio_file}
-            data = {"model": "whisper-1"}
-
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.post(url, headers=headers, files=files, data=data)
-
-                    if response.status_code == 200:
-                        text = response.json().get("text", "").strip()
-
-                        # 💡 Whisper 단골 헛소리(환각) 필터링 차단
-                        hallucinations = ["당신", "당신.", "you", "you.", "감사합니다", "감사합니다.", "시청해 주셔서 감사합니다."]
-                        if text.lower() in hallucinations:
-                            print("⚠️ [STT 환각 제거됨] 침묵 또는 노이즈")
-                            return ""
-
-                        return text
-                    else:
-                        print(f"❌ [STT 실패] 상태코드: {response.status_code}, 상세: {response.text}")
-            except Exception as e:
-                print(f"[STT 오류] {e}")
-
+        print(f"🎤 [STT] 수신된 오디오 크기: {len(audio_bytes)} 바이트")
+        if not api_key or len(audio_bytes) < 100:
+            print("⚠️ [STT 무시됨] 키가 없거나 데이터가 너무 짧습니다.")
             return ""
+
+        url = "https://api.openai.com/v1/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
+        files = {"file": audio_file}
+        data = {"model": "whisper-1"}
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, headers=headers, files=files, data=data)
+
+                if response.status_code == 200:
+                    text = response.json().get("text", "").strip()
+
+                    # 💡 Whisper 단골 헛소리(환각) 필터링 차단
+                    hallucinations = ["당신", "당신.", "you", "you.", "감사합니다", "감사합니다.", "시청해 주셔서 감사합니다."]
+                    if text.lower() in hallucinations:
+                        print("⚠️ [STT 환각 제거됨] 침묵 또는 노이즈")
+                        return ""
+
+                    return text
+                else:
+                    print(f"❌ [STT 실패] 상태코드: {response.status_code}, 상세: {response.text}")
+        except Exception as e:
+            print(f"[STT 오류] {e}")
+
+        return ""
 
 
     @staticmethod
