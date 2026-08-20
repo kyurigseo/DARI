@@ -44,7 +44,8 @@ class AIServicePipeline:
 
                     hallucinations = ["당신", "당신.", "you", "you.", "감사합니다", "감사합니다.", "시청해 주셔서 감사합니다."]
                     if text.lower() in hallucinations:
-                        return f"[빈소리/깡통] {text}"
+                        print("⚠️ [STT 환각 제거됨] 침묵 또는 노이즈")
+                        return ""
 
                     return text
 
