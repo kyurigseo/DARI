@@ -48,38 +48,30 @@ class MeetingConsumer(AsyncWebsocketConsumer):
         )
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
-    async def receive_bytes(self, bytes_data):
-        self.audio_buffer.extend(bytes_data)
+async def receive_bytes(self, bytes_data):
+        print(f"🎤 [STT 요청] {len(bytes_data)} 바이트 수신, 즉시 처리 시작")
 
+        original_text = await AIServicePipeline.process_stt(bytes_data)
 
-        if len(self.audio_buffer) >= 16 * 1024:
-            chunk_to_process = bytes(self.audio_buffer)
-            self.audio_buffer.clear()
-            print(f"🎤 [STT 요청] {len(chunk_to_process)} 바이트의 음성 데이터 처리 시작")
-            original_text = await AIServicePipeline.process_stt(chunk_to_process)
+        if original_text:
             print(f"📝 [STT 결과] {original_text}")
+            target_langs = ['KO', 'EN-US', 'JA', 'ZH', 'DE']
+            translations = await AIServicePipeline.process_translation(original_text, target_langs)
 
-            if original_text:
-                target_langs = ['KO', 'EN-US', 'JA', 'ZH', 'DE']
-                translations = await AIServicePipeline.process_translation(original_text, target_langs)
+            await self.save_transcript(original_text, translations)
 
-                await self.save_transcript(original_text, translations)
-
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'subtitle_broadcast',
-                        'speaker_id': self.user.id,
-                        'speaker_name': self.user.username,
-                        'original_text': original_text,
-                        'translations': translations
-                    }
-                )
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'subtitle_broadcast',
+                    'speaker_id': self.user.id,
+                    'speaker_name': self.user.username,
+                    'original_text': original_text,
+                    'translations': translations
+                }
+            )
 
     async def receive(self, text_data=None, bytes_data=None):
-        # AsyncWebsocketConsumer는 프레임 종류(text/binary)에 따라
-        # 이 receive() 하나만 호출한다. 오디오 청크(binary)는 receive_bytes로,
-        # 시그널링/채팅 등 JSON(text)은 아래 분기로 위임한다.
         if bytes_data is not None:
             await self.receive_bytes(bytes_data)
             return
