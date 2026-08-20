@@ -11,6 +11,16 @@ function formatLocalDateTime(value) {
   }
 }
 
+function toUtcIsoString(date, time) {
+  // date/time은 브라우저(사용자) 로컬 타임존 기준 값이므로, Date의 로컬-타임존
+  // 생성자로 만든 뒤 toISOString()으로 변환해야 백엔드(UTC)에 정확한 시각이 전달된다.
+  // `${date}T${time}` 같은 단순 문자열 이어붙이기는 타임존 정보가 없어 오프셋만큼
+  // 어긋난 시각이 저장되므로 반드시 이 변환을 거쳐야 한다.
+  const [year, month, day] = date.split('-').map(Number)
+  const [hours, minutes] = time.split(':').map(Number)
+  return new Date(year, month - 1, day, hours, minutes).toISOString()
+}
+
 function createRoomCode() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
 
@@ -132,7 +142,7 @@ function CreateMeetingModal({ onClose }) {
       const createdMeeting = await createMeeting({
         title: trimmedTitle,
         room_code: createRoomCode(),
-        scheduled_start_time: `${date}T${time}:00`,
+        scheduled_start_time: toUtcIsoString(date, time),
         participants,
       })
       if (!createdMeeting?.room_code) {
