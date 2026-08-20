@@ -1,8 +1,31 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getMyPage } from '../../api/auth'
 import dariLogo from '../../assets/img/logo/dari_logo.svg'
 import './Header.css'
 
 function Header({ onMenuClick }) {
+  const [profile, setProfile] = useState(null)
+
+  useEffect(() => {
+    let isMounted = true
+
+    getMyPage()
+      .then((data) => {
+        if (!isMounted) return
+        setProfile({ name: data.name, profileImage: data.profile_image })
+      })
+      .catch(() => {
+        // 헤더는 항상 떠 있어야 하므로 조회 실패 시에도 조용히 기본값(이니셜 없음)으로 둔다.
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const initial = profile?.name?.trim()?.slice(0, 1) || ''
+
   return (
     <header className="header">
       <div className="header__left">
@@ -29,7 +52,11 @@ function Header({ onMenuClick }) {
           <span>14:00 · Acme Corp 협상</span>
         </Link> */}
         <Link className="header__profile" to="/mypage" aria-label="마이페이지">
-          김
+          {profile?.profileImage ? (
+            <img className="header__profile-image" src={profile.profileImage} alt="" />
+          ) : (
+            initial
+          )}
         </Link>
       </div>
     </header>

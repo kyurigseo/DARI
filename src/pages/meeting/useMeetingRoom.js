@@ -472,21 +472,66 @@ export function useMeetingRoom(roomCode) {
       return next
     })
   }, [cameraOn, upsertParticipant])
-
-  const toggleCamera = useCallback(() => {
-    setCameraOn((prev) => {
-      const next = !prev
-      const cameraTracks = screenTrackRef.current
-        ? [cameraTrackRef.current].filter(Boolean)
-        : localStreamRef.current?.getVideoTracks() || []
-      cameraTracks.forEach((track) => {
-        track.enabled = next
-      })
+  const toggleCamera = useCallback(async () => {
+    // 화면 공유 중에는 실제로 전송되는 트랙이 화면 트랙이므로, 카메라 트랙은
+    // 화면 공유 종료 후 복원될 때 쓸 용도로만 enabled 값을 맞춰둔다(기존 동작 유지).
+    if (screenTrackRef.current) {
+      const next = !cameraOn
+      if (cameraTrackRef.current) cameraTrackRef.current.enabled = next
       socketRef.current?.sendStatusUpdate({ isMicOn: micOn, isCameraOn: next })
       if (meRef.current) upsertParticipant(meRef.current.id, { cameraOn: next })
-      return next
-    })
-  }, [micOn, upsertParticipant])
+      setCameraOn(next)
+      return
+    }
+
+    if (cameraOn) {
+      // 카메라 끄기: enabled만 false로 바꾸는 대신 트랙 자체를 정지해 카메라 하드웨어를 해제한다.
+      // (트랙을 살려두면 재시작 시 getUserMedia()가 같은 장치를 다시 열려다 충돌할 수 있다.)
+      cameraTrackRef.current?.stop()
+      cameraTrackRef.current = null
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach((track) => {
+          track.stop()
+          localStreamRef.current.removeTrack(track)
+        })
+      }
+      socketRef.current?.sendStatusUpdate({ isMicOn: micOn, isCameraOn: false })
+      if (meRef.current) upsertParticipant(meRef.current.id, { cameraOn: false })
+      setCameraOn(false)
+      return
+    }
+
+    // 카메라 켜기: 꺼질 때 트랙을 완전히 정지시켰기 때문에 enabled=true만으로는 복구되지 않는다.
+    // getUserMedia()로 새 비디오 트랙을 받아 localStream/participant.stream 참조 자체를 갱신해야
+    // VideoTile의 srcObject 재할당 useEffect(participant.stream 의존)가 다시 실행된다.
+    try {
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({ video: true })
+      const newTrack = newVideoStream.getVideoTracks()[0]
+      if (!newTrack) return
+
+      cameraTrackRef.current = newTrack
+
+      const audioTracks = localStreamRef.current?.getAudioTracks() || []
+      const rebuiltStream = new MediaStream([...audioTracks, newTrack])
+      localStreamRef.current = rebuiltStream
+      setLocalStream(rebuiltStream)
+
+      // 각 피어 연결의 비디오 sender에 새 트랙을 꽂아준다(없으면 새로 추가).
+      peersRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((item) => item.track?.kind === 'video')
+        if (sender) sender.replaceTrack(newTrack)
+        else pc.addTrack(newTrack, rebuiltStream)
+      })
+
+      socketRef.current?.sendStatusUpdate({ isMicOn: micOn, isCameraOn: true })
+      if (meRef.current) {
+        upsertParticipant(meRef.current.id, { cameraOn: true, stream: rebuiltStream })
+      }
+      setCameraOn(true)
+    } catch (err) {
+      showToast('카메라를 다시 시작하지 못했어요. 권한을 확인해 주세요.')
+    }
+  }, [cameraOn, micOn, upsertParticipant, showToast])
 
   const stopScreenShare = useCallback(async () => {
     const cameraTrack = cameraTrackRef.current
