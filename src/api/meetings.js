@@ -73,3 +73,13 @@ export async function sendReportEmail(roomCode, payload) {
   const { data } = await meetingsClient.post(`/meetings/${roomCode}/send-email/`, payload)
   return data
 }
+
+export async function getInvitations() {
+  const { data } = await meetingsClient.get('/meetings/invitations/')
+  return data
+}
+
+export async function respondInvitation(meetingId, action) {
+  const { data } = await meetingsClient.post(`/meetings/invitations/${meetingId}/respond/`, { action })
+  return data
+}

@@ -8,6 +8,13 @@ const AVATAR_COLORS = ['#8454f6', '#e0546b', '#12b8a6', '#ff9351', '#4f8cff']
 // 공개 STUN 서버만 사용 (TURN 서버가 없으면 대칭 NAT/방화벽 환경에서는 연결이 실패할 수 있음)
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
 
+// 에너지 기반 VAD(Voice Activity Detection) 파라미터.
+// getByteTimeDomainData로 읽은 파형의 RMS(0~1)가 이 값보다 크면 "발화 있음"으로 판단한다.
+// 마이크 감도/배경소음에 따라 적정값이 달라지므로 상식적인 기본값만 넣어뒀다 — 실측 후 조정 필요.
+const VAD_THRESHOLD = 0.02
+const VAD_CHECK_INTERVAL_MS = 75
+const VAD_FFT_SIZE = 512
+
 function colorFor(index) {
   return AVATAR_COLORS[index % AVATAR_COLORS.length]
 }
@@ -43,6 +50,11 @@ export function useMeetingRoom(roomCode) {
   const audioStreamRef = useRef(null)
   const audioStreamingActiveRef = useRef(false)
   const audioChunkTimerRef = useRef(null)
+  const audioContextRef = useRef(null)
+  const analyserRef = useRef(null)
+  const vadIntervalRef = useRef(null)
+  const voiceDetectedInWindowRef = useRef(false)
+  const silentChunkSkipCountRef = useRef(0)
   const cameraTrackRef = useRef(null)
   const screenTrackRef = useRef(null)
   const toastTimerRef = useRef(null)
@@ -203,12 +215,24 @@ export function useMeetingRoom(roomCode) {
     if (!audioStreamingActiveRef.current || !audioStreamRef.current) return
     try {
       const recorder = new MediaRecorder(audioStreamRef.current, { mimeType: 'audio/webm;codecs=opus' })
+      // 이번 청크 구간에서 VAD가 발화를 감지했는지 새로 추적 시작.
+      voiceDetectedInWindowRef.current = false
 
       recorder.ondataavailable = async (event) => {
-        if (event.data && event.data.size > 0 && socketRef.current?.isOpen) {
-          const buffer = await event.data.arrayBuffer()
-          socketRef.current.sendBytes(buffer)
+        if (!event.data || event.data.size === 0 || !socketRef.current?.isOpen) return
+
+        // analyserRef가 없으면(VAD 초기화 실패) 게이팅 없이 기존처럼 전부 전송한다(fail-open).
+        const vadActive = Boolean(analyserRef.current)
+        if (vadActive && !voiceDetectedInWindowRef.current) {
+          silentChunkSkipCountRef.current += 1
+          console.debug(
+            `[VAD] 무음/잡음 구간으로 판단되어 청크 전송 스킵 (누적 ${silentChunkSkipCountRef.current}개)`,
+          )
+          return
         }
+
+        const buffer = await event.data.arrayBuffer()
+        socketRef.current.sendBytes(buffer)
       }
 
       recorder.onstop = () => {
@@ -232,6 +256,40 @@ export function useMeetingRoom(roomCode) {
     (stream) => {
       if (!stream.getAudioTracks().length) return
       audioStreamRef.current = new MediaStream(stream.getAudioTracks())
+
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext
+        const audioContext = new AudioContextClass()
+        const source = audioContext.createMediaStreamSource(audioStreamRef.current)
+        const analyser = audioContext.createAnalyser()
+        analyser.fftSize = VAD_FFT_SIZE
+
+        source.connect(analyser)
+        audioContextRef.current = audioContext
+        analyserRef.current = analyser
+
+        const timeDomainData = new Uint8Array(analyser.fftSize)
+        vadIntervalRef.current = setInterval(() => {
+          analyser.getByteTimeDomainData(timeDomainData)
+
+          // RMS(제곱평균제곱근) 볼륨 계산. 바이트 값(0~255, 128이 무음 중심)을 -1~1로 정규화.
+          let sumSquares = 0
+          for (let i = 0; i < timeDomainData.length; i += 1) {
+            const normalized = (timeDomainData[i] - 128) / 128
+            sumSquares += normalized * normalized
+          }
+          const rms = Math.sqrt(sumSquares / timeDomainData.length)
+
+          if (rms > VAD_THRESHOLD) {
+            voiceDetectedInWindowRef.current = true
+          }
+        }, VAD_CHECK_INTERVAL_MS)
+      } catch (err) {
+        // AudioContext 미지원/생성 실패 시에도 화상/음성 자체는 계속 되어야 하므로
+        // VAD 없이(게이팅 없이) 기존 방식대로 전부 전송한다.
+        console.warn('VAD를 초기화하지 못했습니다. 무음 필터링 없이 전송합니다.', err)
+      }
+
       audioStreamingActiveRef.current = true
       recordNextAudioChunk()
     },
@@ -248,6 +306,16 @@ export function useMeetingRoom(roomCode) {
     }
     mediaRecorderRef.current = null
     audioStreamRef.current = null
+
+    // VAD용 AudioContext/AnalyserNode/폴링 interval 정리 (메모리 누수 방지).
+    clearInterval(vadIntervalRef.current)
+    vadIntervalRef.current = null
+    analyserRef.current = null
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {})
+      audioContextRef.current = null
+    }
+    voiceDetectedInWindowRef.current = false
   }, [])
 
   const handleSocketMessage = useCallback(

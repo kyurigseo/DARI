@@ -276,6 +276,76 @@
   background: #e6dcff;
 }
 
+.create-meeting-modal__participants {
+  margin-top: 17px;
+}
+
+.create-meeting-modal__participant-row {
+  display: flex;
+  gap: 8px;
+}
+
+.create-meeting-modal__participant-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-meeting-modal__add-button {
+  min-width: 64px;
+  padding: 0 16px;
+  flex: 0 0 auto;
+  color: var(--color-primary);
+  background: #f8f5ff;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.create-meeting-modal__add-button:hover {
+  border-color: var(--color-primary);
+}
+
+.create-meeting-modal__chips {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.create-meeting-modal__chip {
+  padding: 6px 8px 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.create-meeting-modal__chip-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.create-meeting-modal__chip-remove:hover {
+  background: rgb(132 84 246 / 16%);
+}
+
 .create-meeting-modal__guide {
   margin: 18px 0 0;
   color: var(--color-muted);
