@@ -77,7 +77,8 @@ class UserProfile(models.Model):
 @receiver(post_save, sender=User)
 def create_or_update_user_profile(sender, instance, created, **kwargs):
     if created:
-        UserProfile.objects.create(user=instance)
+        role_display = dict(instance.ROLE_CHOICES).get(instance.role, "기타")
+        UserProfile.objects.create(user=instance, position_team=role_display)
     else:
         if hasattr(instance, 'profile'):
             instance.profile.save()

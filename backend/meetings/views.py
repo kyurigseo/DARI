@@ -431,3 +431,19 @@ class MeetingEmailSendView(APIView):
                 'error': '이메일 전송 중 오류가 발생했습니다. 네트워크 상태를 확인하고 잠시 후 다시 시도해 주세요.',
                 'detail': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class HomeMeetingListView(APIView):
+    """
+    [홈 화면 API]
+    내가 참여 예정이거나 대기 중인(WAITING) 회의 목록만 조회
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        meetings = MeetingSession.objects.filter(
+            (models.Q(host=request.user) | models.Q(participants__user=request.user)),
+            status='WAITING'
+        ).distinct().order_by('-created_at')
+
+        serializer = MeetingSessionSerializer(meetings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

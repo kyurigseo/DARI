@@ -13,7 +13,8 @@ from .views import (
     MeetingMemoDeleteView,
     ActionItemUpdateView,
     MeetingShareTextView,
-    MeetingEmailSendView
+    MeetingEmailSendView,
+    HomeMeetingListView
 )
 
 urlpatterns = [
@@ -31,4 +32,5 @@ urlpatterns = [
     path('action-items/<uuid:item_id>/', ActionItemUpdateView.as_view(), name='action-item-update'),
     path('<str:room_code>/share-text/', MeetingShareTextView.as_view(), name='meeting-share-text'),
     path('<str:room_code>/send-email/', MeetingEmailSendView.as_view(), name='meeting-send-email'),
+    path('home/', HomeMeetingListView.as_view(), name='home-meetings'),
 ]

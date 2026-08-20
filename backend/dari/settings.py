@@ -13,13 +13,14 @@ import os
 import dj_database_url
 from datetime import timedelta
 from pathlib import Path
-
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 load_dotenv(BASE_DIR / ".env")
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+DEEPL_API_KEY = os.getenv('DEEPL_API_KEY')
 
 DARI_DEMO_MODE = os.environ.get('DARI_DEMO_MODE', '').lower() == 'true'
 
