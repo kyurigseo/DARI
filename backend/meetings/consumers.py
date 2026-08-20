@@ -51,11 +51,13 @@ class MeetingConsumer(AsyncWebsocketConsumer):
     async def receive_bytes(self, bytes_data):
         self.audio_buffer.extend(bytes_data)
 
-        if len(self.audio_buffer) >= 64 * 1024:
+
+        if len(self.audio_buffer) >= 16 * 1024:
             chunk_to_process = bytes(self.audio_buffer)
             self.audio_buffer.clear()
-
+            print(f"🎤 [STT 요청] {len(chunk_to_process)} 바이트의 음성 데이터 처리 시작")
             original_text = await AIServicePipeline.process_stt(chunk_to_process)
+            print(f"📝 [STT 결과] {original_text}")
 
             if original_text:
                 target_langs = ['KO', 'EN-US', 'JA', 'ZH', 'DE']
