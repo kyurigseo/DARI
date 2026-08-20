@@ -51,7 +51,15 @@ class PrejoinView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, room_code):
-        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        if room_code.startswith("00000000") or room_code.startswith("demo-"):
+            meeting = MeetingSession.objects.all().order_by('-created_at').first()
+        else:
+            meeting = MeetingSession.objects.filter(room_code=room_code).first()
+            if not meeting:
+                meeting = MeetingSession.objects.all().order_by('-created_at').first()
+
+        if not meeting:
+            return Response({'error': '생성된 회의가 없습니다. 먼저 회의를 만들어주세요.'}, status=status.HTTP_404_NOT_FOUND)
 
         if meeting.status == 'ENDED':
             return Response({'error': '이미 종료된 회의입니다.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -66,29 +74,8 @@ class PrejoinView(APIView):
             'participants_count': active_participants.count(),
             'participants': ParticipantSerializer(active_participants, many=True).data
         }
-        if settings.DARI_DEMO_MODE and meeting.room_code.startswith('demo-'):
-            response_data['chat_history'] = [
-                {
-                    'id': str(message.id),
-                    'sender_id': str(message.sender_id),
-                    'sender_name': message.sender.username,
-                    'message': message.message,
-                    'is_speech_card': message.is_speech_card,
-                }
-                for message in meeting.chat_messages.select_related('sender').all()
-            ]
-            response_data['transcript_history'] = [
-                {
-                    'id': str(transcript.id),
-                    'speaker_id': str(transcript.speaker_id),
-                    'speaker_name': transcript.speaker.username,
-                    'original_text': transcript.original_text,
-                    'translations': transcript.translations,
-                }
-                for transcript in meeting.transcripts.select_related('speaker').all()
-            ]
-        return Response(response_data)
 
+        return Response(response_data)
 
 class MediaTokenView(APIView):
     permission_classes = [IsAuthenticated]
