@@ -42,13 +42,12 @@ class AIServicePipeline:
                 if response.status_code == 200:
                     text = response.json().get("text", "").strip()
 
-                    # 💡 Whisper 단골 헛소리(환각) 필터링 차단
                     hallucinations = ["당신", "당신.", "you", "you.", "감사합니다", "감사합니다.", "시청해 주셔서 감사합니다."]
                     if text.lower() in hallucinations:
-                        print("⚠️ [STT 환각 제거됨] 침묵 또는 노이즈")
-                        return ""
+                        return f"[빈소리/깡통] {text}"
 
                     return text
+
                 else:
                     print(f"❌ [STT 실패] 상태코드: {response.status_code}, 상세: {response.text}")
         except Exception as e:
