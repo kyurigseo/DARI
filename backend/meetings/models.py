@@ -24,10 +24,17 @@ class MeetingSession(models.Model):
 
 
 class MeetingParticipant(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', '대기 중'),
+        ('ACCEPTED', '수락'),
+        ('REJECTED', '거절'),
+    ]
+
     meeting = models.ForeignKey(MeetingSession, on_delete=models.CASCADE, related_name='participants')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     is_host = models.BooleanField(default=False)
 
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
 
     is_mic_on = models.BooleanField(default=True)
     is_camera_on = models.BooleanField(default=True)
@@ -35,20 +42,20 @@ class MeetingParticipant(models.Model):
     local_time_zone = models.CharField(max_length=50, default='UTC')
 
     joined_at = models.DateTimeField(auto_now_add=True)
-    is_active = models.BooleanField(default=True) # 현재 접속 여부
+    is_active = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('meeting', 'user')
 
     def __str__(self):
-        return f"{self.user.username} in {self.meeting.room_code}"
+        return f"{self.user.username} in {self.meeting.room_code} ({self.status})"
 
 class MeetingTranscript(models.Model):
     meeting = models.ForeignKey(MeetingSession, on_delete=models.CASCADE, related_name='transcripts')
     speaker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     original_text = models.TextField()
-    speaker_lang = models.CharField(max_length=10, default='auto') # 발언자 언어
+    speaker_lang = models.CharField(max_length=10, default='auto')
 
     translations = models.JSONField(default=dict, blank=True)
 

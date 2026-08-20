@@ -1,6 +1,7 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
 import threading
 import urllib.parse
+import uuid
 from django.db import models
 from django.conf import settings
 from rest_framework import status, generics
@@ -34,23 +35,30 @@ class CreateMeetingView(APIView):
 
     def post(self, request):
         title = request.data.get('title', '신규 회의')
+
         room_code = request.data.get('room_code')
+        if not room_code:
+            room_code = str(uuid.uuid4())[:8]
 
-        if MeetingSession.objects.filter(room_code=room_code).exists():
-            return Response({'error': '이미 존재하는 회의 코드입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        while MeetingSession.objects.filter(room_code=room_code).exists():
+            room_code = str(uuid.uuid4())[:8]
 
-        meeting = MeetingSession.objects.create(
-            room_code=room_code,
-            title=title,
-            host=request.user
-        )
-        return Response(MeetingSessionSerializer(meeting).data, status=status.HTTP_201_CREATED)
-
+        try:
+            meeting = MeetingSession.objects.create(
+                room_code=room_code,
+                title=title,
+                host=request.user,
+            )
+            return Response(MeetingSessionSerializer(meeting).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print(f"🔥 회의 생성 중 에러 발생: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class PrejoinView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, room_code):
+        # 💡 목 데이터 코드가 들어오거나 DB에 없을 경우 가장 최근 회의를 안전하게 연결
         if room_code.startswith("00000000") or room_code.startswith("demo-"):
             meeting = MeetingSession.objects.all().order_by('-created_at').first()
         else:
@@ -74,6 +82,28 @@ class PrejoinView(APIView):
             'participants_count': active_participants.count(),
             'participants': ParticipantSerializer(active_participants, many=True).data
         }
+
+        if settings.DARI_DEMO_MODE and meeting.room_code.startswith('demo-'):
+            response_data['chat_history'] = [
+                {
+                    'id': str(message.id),
+                    'sender_id': str(message.sender_id),
+                    'sender_name': message.sender.username,
+                    'message': message.message,
+                    'is_speech_card': message.is_speech_card,
+                }
+                for message in meeting.chat_messages.select_related('sender').all()
+            ]
+            response_data['transcript_history'] = [
+                {
+                    'id': str(transcript.id),
+                    'speaker_id': str(transcript.speaker_id),
+                    'speaker_name': transcript.speaker.username,
+                    'original_text': transcript.original_text,
+                    'translations': transcript.translations,
+                }
+                for transcript in meeting.transcripts.select_related('speaker').all()
+            ]
 
         return Response(response_data)
 
@@ -166,8 +196,7 @@ class KickParticipantView(APIView):
             participant.is_active = False
             participant.save()
 
-            # 실시간으로 연결되어 있는 대상 참가자의 WebSocket에 강퇴 신호를 보내
-            # 클라이언트가 즉시 통화를 종료하도록 한다.
+            # 실시간으로 연결되어 있는 대상 참가자의 WebSocket에 강퇴 신호를 보냄
             channel_layer = get_channel_layer()
             if channel_layer is not None:
                 async_to_sync(channel_layer.group_send)(
@@ -232,17 +261,11 @@ class UserMeetingListView(APIView):
 class MeetingReportDetailView(APIView):
     """
     [특정 회의 상세 리포트 조회 API]
-    - 회의 기본 정보 및 상단 타이틀
-    - AI 요약문
-    - 본인이 작성한 메모 리스트
-    - 회의의 Action Item 리스트
-    - 회의 참가자 명단 (담당자 지정 모달 연동용)
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, room_code):
         meeting = get_object_or_404(MeetingSession, room_code=room_code)
-
 
         summary_obj = getattr(meeting, 'summary', None)
         summary_content = summary_obj.content if summary_obj else "아직 생성된 회의 요약이 없습니다."
@@ -280,8 +303,6 @@ class MeetingReportDetailView(APIView):
 class MeetingMemoListCreateView(APIView):
     """
     [메모 목록 조회 및 작성 API]
-    GET: 해당 회의에 내가 쓴 메모 목록
-    POST: 새 메모 작성 저장
     """
     permission_classes = [IsAuthenticated]
 
@@ -310,7 +331,6 @@ class MeetingMemoListCreateView(APIView):
 class MeetingMemoDeleteView(APIView):
     """
     [메모 삭제 API]
-    메모 우측 x 버튼 클릭 시 삭제 처리
     """
     permission_classes = [IsAuthenticated]
 
@@ -323,9 +343,6 @@ class MeetingMemoDeleteView(APIView):
 class ActionItemUpdateView(APIView):
     """
     [Action Item 수정 API (PATCH)]
-    - 완료 체크박스 상태 토글 (`is_completed`)
-    - 담당자 변경 (`assignee`)
-    - 마감 기한 변경 (`due_date`: "YYYY-MM-DD" 또는 null)
     """
     permission_classes = [IsAuthenticated]
 
@@ -349,8 +366,6 @@ class ActionItemUpdateView(APIView):
 class MeetingShareTextView(APIView):
     """
     [Slack / 클립보드 복사 및 mailto 생성 API]
-    - formatted_text: 슬랙이나 메모장에 붙여넣을 완성된 텍스트
-    - mailto_link: 클릭 시 이메일 앱(Outlook, 기본 메일 앱)을 띄우는 링크 파라미터
     """
     permission_classes = [IsAuthenticated]
 
@@ -374,8 +389,6 @@ class MeetingShareTextView(APIView):
 class MeetingEmailSendView(APIView):
     """
     [Django SMTP 기반 회의 결과 이메일 직접 전송 API]
-    - 참석자 전원 또는 입력받은 이메일 목록으로 전송
-    - 전송 실패 시 예외 처리 및 에러 안내
     """
     permission_classes = [IsAuthenticated]
 
@@ -422,7 +435,6 @@ class MeetingEmailSendView(APIView):
 class HomeMeetingListView(APIView):
     """
     [홈 화면 API]
-    내가 참여 예정이거나 대기 중인(WAITING) 회의 목록만 조회
     """
     permission_classes = [IsAuthenticated]
 
@@ -434,3 +446,49 @@ class HomeMeetingListView(APIView):
 
         serializer = MeetingSessionSerializer(meetings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class InvitationListView(APIView):
+    """
+    [받은 회의 초대 목록 조회 API]
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        invitations = MeetingParticipant.objects.filter(user=request.user, status='PENDING')
+        data = []
+        for inv in invitations:
+            data.append({
+                "meeting_id": inv.meeting.id,
+                "room_code": inv.meeting.room_code,
+                "title": inv.meeting.title,
+                "host_name": inv.meeting.host.username if inv.meeting.host else "호스트",
+                "created_at": inv.meeting.created_at,
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class RespondInvitationView(APIView):
+    """
+    [회의 초대 수락 / 거절 처리 API]
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, meeting_id):
+        action = request.data.get('action')
+
+        participant = get_object_or_404(MeetingParticipant, meeting_id=meeting_id, user=request.user)
+
+        if action == 'accept':
+            participant.status = 'ACCEPTED'
+            participant.is_active = True
+            participant.save(update_fields=['status', 'is_active'])
+            return Response({'message': '회의 참가가 수락되었습니다.'}, status=status.HTTP_200_OK)
+
+        elif action == 'reject':
+            participant.status = 'REJECTED'
+            participant.is_active = False
+            participant.save(update_fields=['status', 'is_active'])
+            return Response({'message': '회의 로그가 거절되었습니다.'}, status=status.HTTP_200_OK)
+
+        else:
+            return Response({'error': '올바르지 않은 요청입니다. (action: accept/reject 필요)'}, status=status.HTTP_400_BAD_REQUEST)
