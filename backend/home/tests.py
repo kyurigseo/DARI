@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -32,6 +35,31 @@ class HomeDashboardLiveMeetingsTests(APITestCase):
         self.assertEqual(meeting["participant_count"], 1)
         self.assertEqual(meeting["join_url"], "/meeting/room-live-1")
         self.assertNotIn("(mock)", meeting["title"])
+
+    def test_today_meetings_uses_scheduled_start_time_when_set(self):
+        scheduled = timezone.now() + timedelta(hours=3)
+        self.meeting.scheduled_start_time = scheduled
+        self.meeting.save(update_fields=["scheduled_start_time"])
+
+        response = self.client.get("/api/v1/home/")
+
+        self.assertEqual(response.status_code, 200)
+        meeting = response.data["today_meetings"][0]
+        # DRF는 UTC 오프셋을 "+00:00" 대신 "Z"로 렌더링하므로 문자열이 아닌 파싱된
+        # datetime으로 비교한다(같은 시각의 다른 표기일 뿐, 버그 아님).
+        returned_start = datetime.fromisoformat(meeting["start_time"])
+        self.assertEqual(returned_start, scheduled)
+        self.assertNotEqual(returned_start, self.meeting.created_at)
+
+    def test_today_meetings_falls_back_to_created_at_without_scheduled_start_time(self):
+        self.assertIsNone(self.meeting.scheduled_start_time)
+
+        response = self.client.get("/api/v1/home/")
+
+        self.assertEqual(response.status_code, 200)
+        meeting = response.data["today_meetings"][0]
+        returned_start = datetime.fromisoformat(meeting["start_time"])
+        self.assertEqual(returned_start, self.meeting.created_at)
 
     def test_ended_meeting_is_excluded(self):
         self.meeting.status = "ENDED"

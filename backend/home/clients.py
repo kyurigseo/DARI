@@ -62,8 +62,10 @@ def _call_external_service(base_url_setting, path, timeout=2):
 
 
 def _map_meeting_session(item):
-    """meetings.MeetingSessionSerializer 응답 -> home의 today_meetings 항목 계약으로 변환."""
-    start = item["created_at"]
+    """meetings.MeetingSessionSerializer 응답 -> home의 today_meetings 항목 계약으로 변환.
+    start_time은 scheduled_start_time(예정 시각)을 우선 쓰고, 값이 없으면(과거 데이터 등)
+    created_at(생성 시각)으로 폴백한다."""
+    start = item.get("scheduled_start_time") or item["created_at"]
     parsed_start = _parse_iso(start)
     end = (parsed_start + timedelta(hours=1)).isoformat() if parsed_start else start
     participant_count = sum(1 for p in item.get("participants", []) if p.get("is_active"))
@@ -84,10 +86,10 @@ def fetch_today_meetings(request):
     meetings 앱의 홈 화면 전용 API(GET /api/meetings/home/, HomeMeetingListView)를 호출해
     참여 예정/대기 중(WAITING)인 회의 목록을 가져온다. meetings는 home과 같은 프로세스에서
     도는 앱이라 _call_internal_app으로 호출하고, 응답의 MeetingSessionSerializer 필드
-    (id/room_code/title/created_at/participants)를 home 계약(meeting_id/room_code/title/
-    start_time/end_time/participant_count/join_url)으로 변환한다.
-    meetings에는 아직 별도 예정 시각 필드가 없어 created_at을 start_time으로 쓰고
-    end_time은 1시간 뒤로 가정한다(데모 모드 분기와 동일한 방식).
+    (id/room_code/title/scheduled_start_time/created_at/participants)를 home 계약
+    (meeting_id/room_code/title/start_time/end_time/participant_count/join_url)으로 변환한다.
+    start_time은 scheduled_start_time(예정 시각)을 쓰고, 값이 없으면 created_at으로 폴백한다.
+    end_time은 그 start_time 기준 1시간 뒤로 가정한다(데모 모드 분기와 동일한 방식).
     """
     if settings.DARI_DEMO_MODE:
         # Demo meetings are real rows created by seed_demo_data. The meeting
@@ -102,13 +104,18 @@ def fetch_today_meetings(request):
             .distinct()
             .order_by("created_at")
         )
+        def _demo_start(meeting):
+            # scheduled_start_time은 meetings 쪽에 아직 없을 수 있어(B가 추가 예정) getattr로
+            # 안전하게 조회하고, 없거나 비어있으면 created_at(생성 시각)으로 폴백한다.
+            return getattr(meeting, "scheduled_start_time", None) or meeting.created_at
+
         results = [
             {
                 "meeting_id": str(meeting.id),
                 "room_code": meeting.room_code,
                 "title": meeting.title,
-                "start_time": meeting.created_at.isoformat(),
-                "end_time": (meeting.created_at + timedelta(hours=1)).isoformat(),
+                "start_time": _demo_start(meeting).isoformat(),
+                "end_time": (_demo_start(meeting) + timedelta(hours=1)).isoformat(),
                 "participant_count": meeting.participants.filter(is_active=True).count(),
                 "join_url": f"/meeting/{meeting.room_code}",
                 "joinable": meeting.status != "ENDED",
