@@ -45,10 +45,9 @@ class CreateMeetingView(APIView):
 
     def post(self, request):
         title = request.data.get('title', '신규 회의')
+        scheduled_start_time = request.data.get('scheduled_start_time')
 
         room_code = request.data.get('room_code')
-        if not room_code:
-            room_code = str(uuid.uuid4())[:8]
 
         while MeetingSession.objects.filter(room_code=room_code).exists():
             room_code = str(uuid.uuid4())[:8]
@@ -98,6 +97,7 @@ class CreateMeetingView(APIView):
                     room_code=room_code,
                     title=title,
                     host=request.user,
+                    scheduled_start_time=scheduled_start_time,
                 )
 
                 participants = []

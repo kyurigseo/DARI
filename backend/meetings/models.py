@@ -14,10 +14,24 @@ class MeetingSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     room_code = models.CharField(max_length=50, unique=True, db_index=True)
     title = models.CharField(max_length=255)
-    host = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='hosted_meetings')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='WAITING')
+    host = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='hosted_meetings'
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='WAITING'
+    )
+
+    # 회의 예정 시작 시각
+    scheduled_start_time = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
-    started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):

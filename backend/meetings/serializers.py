@@ -31,7 +31,7 @@ class MeetingSessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MeetingSession
-        fields = ['id', 'room_code', 'title', 'host', 'status', 'created_at', 'participants']
+        fields = ['id', 'room_code', 'title', 'host', 'status', 'created_at', 'participants', 'scheduled_start_time']
 
 class MeetingSummarySerializer(serializers.ModelSerializer):
     class Meta:
