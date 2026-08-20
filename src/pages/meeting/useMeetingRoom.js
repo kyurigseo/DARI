@@ -472,6 +472,7 @@ export function useMeetingRoom(roomCode) {
       return next
     })
   }, [cameraOn, upsertParticipant])
+
   const toggleCamera = useCallback(async () => {
     // 화면 공유 중에는 실제로 전송되는 트랙이 화면 트랙이므로, 카메라 트랙은
     // 화면 공유 종료 후 복원될 때 쓸 용도로만 enabled 값을 맞춰둔다(기존 동작 유지).
