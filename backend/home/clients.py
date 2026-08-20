@@ -63,17 +63,11 @@ def _call_external_service(base_url_setting, path, timeout=2):
 
 def fetch_today_meetings(request):
     """
-    meetings 앱의 "오늘 예정 회의 리스트" API 호출.
-    제안 스펙: GET {MEETINGS_BASE_URL}/internal/meetings/today/?user_id=<uuid>
-              Authorization: Internal <INTERNAL_SERVICE_TOKEN>
-              -> [{meeting_id, title, start_time, end_time, participant_count, join_url}]
-    (아직 meetings 앱이 없어 항상 목업으로 폴백됨)
+    meetings 앱이 현재 동일한 Django 프로젝트 내에 구현되어 있으므로,
+    _call_internal_app을 사용해 내부 API(/api/meetings/home/)를 직접 호출합니다.
     """
     if settings.DARI_DEMO_MODE:
-        # Demo meetings are real rows created by seed_demo_data. The meeting
-        # route uses room_code, not MeetingSession's UUID primary key.
         from meetings.models import MeetingSession
-
         demo_meetings = (
             MeetingSession.objects.filter(
                 models.Q(host=request.user) | models.Q(participants__user=request.user),
@@ -99,27 +93,41 @@ def fetch_today_meetings(request):
         return {"count": len(results), "results": results, "source": "demo"}
 
     try:
-        raw = _call_external_service(
-            "MEETINGS_BASE_URL",
-            f"/internal/meetings/today/?user_id={request.user.id}",
-        )
-        meetings = raw.get("results", raw) if isinstance(raw, dict) else raw
+        raw_meetings = _call_internal_app("/api/meetings/home/", request)
         source = "live"
-    except UpstreamUnavailable:
-        meetings = mocks.MOCK_TODAY_MEETINGS
+    except Exception as e:
+        print(f"[Home API 연동 오류] {e}")
+        raw_meetings = mocks.MOCK_TODAY_MEETINGS
         source = "mock"
 
     now = timezone.now()
     enriched = []
-    for m in meetings:
-        start = _parse_iso(m.get("start_time"))
-        end = _parse_iso(m.get("end_time"))
-        joinable = bool(
-            start
-            and end
-            and (start - JOIN_WINDOW_BEFORE_START) <= now <= end
-        )
-        enriched.append({**m, "joinable": joinable})
+
+    for m in raw_meetings:
+        if source == "live":
+            start_str = m.get("created_at") or now.isoformat()
+            start = _parse_iso(start_str)
+            room_code = m.get("room_code", "")
+
+            enriched.append({
+                "meeting_id": m.get("id"),
+                "room_code": room_code,
+                "title": m.get("title", "새로운 회의"),
+                "start_time": start_str,
+                "end_time": (start + timedelta(hours=1)).isoformat() if start else None,
+                "participant_count": m.get("participants_count", 1),
+                "join_url": f"/meeting/{room_code}",
+                "joinable": True,
+            })
+        else:
+            start = _parse_iso(m.get("start_time"))
+            end = _parse_iso(m.get("end_time"))
+            joinable = bool(
+                start
+                and end
+                and (start - JOIN_WINDOW_BEFORE_START) <= now <= end
+            )
+            enriched.append({**m, "joinable": joinable})
 
     return {"count": len(enriched), "results": enriched, "source": source}
 
