@@ -3,6 +3,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models import MeetingSession, MeetingParticipant, MeetingTranscript, MeetingChatMessage
 from .services import AIServicePipeline
+from django.utils import timezone
 
 class MeetingConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
@@ -192,15 +193,53 @@ class MeetingConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def set_participant_active_status(self, is_active):
-        meeting = MeetingSession.objects.only('id', 'host_id').filter(room_code=self.room_code).first()
-        if meeting:
-            participant, _ = MeetingParticipant.objects.get_or_create(
-                meeting_id=meeting.id,
-                user=self.user,
-                defaults={'is_host': meeting.host_id == self.user.id}
+        meeting = MeetingSession.objects.only(
+            'id',
+            'host_id'
+        ).filter(
+            room_code=self.room_code
+        ).first()
+
+        if not meeting:
+            return
+
+        participant, _ = MeetingParticipant.objects.get_or_create(
+            meeting_id=meeting.id,
+            user=self.user,
+            defaults={
+                'is_host': meeting.host_id == self.user.id,
+            }
+        )
+
+        now = timezone.now()
+
+        participant.is_active = is_active
+
+        if is_active:
+            # 회의에 새로 들어온 시각
+            if participant.joined_at is None:
+                participant.joined_at = now
+
+            participant.left_at = None
+
+            participant.save(
+                update_fields=[
+                    'is_active',
+                    'joined_at',
+                    'left_at',
+                ]
             )
-            participant.is_active = is_active
-            participant.save(update_fields=['is_active'])
+
+        else:
+            # 회의에서 나간 시각
+            participant.left_at = now
+
+            participant.save(
+                update_fields=[
+                    'is_active',
+                    'left_at',
+                ]
+            )
 
     @database_sync_to_async
     def update_participant_media_status(self, is_mic_on, is_camera_on, is_speaking):
