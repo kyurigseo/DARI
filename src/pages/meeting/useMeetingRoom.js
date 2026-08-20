@@ -227,11 +227,14 @@ export function useMeetingRoom(roomCode) {
           break
         }
         case 'status_changed': {
-          upsertParticipant(data.user_id, {
-            micOn: data.is_mic_on,
-            cameraOn: data.is_camera_on,
-            speaking: data.is_speaking,
-          })
+          // 서버는 변경되지 않은 필드를 null로 보낼 수 있다(부분 업데이트).
+          // null/undefined인 필드는 무시해서 다른 상태(예: 카메라)가 실수로
+          // 덮어써지지 않도록 한다.
+          const patch = {}
+          if (data.is_mic_on !== null && data.is_mic_on !== undefined) patch.micOn = data.is_mic_on
+          if (data.is_camera_on !== null && data.is_camera_on !== undefined) patch.cameraOn = data.is_camera_on
+          if (data.is_speaking !== null && data.is_speaking !== undefined) patch.speaking = data.is_speaking
+          upsertParticipant(data.user_id, patch)
           break
         }
         case 'chat': {
@@ -420,11 +423,13 @@ export function useMeetingRoom(roomCode) {
       localStreamRef.current?.getAudioTracks().forEach((track) => {
         track.enabled = next
       })
-      socketRef.current?.sendStatusUpdate({ isMicOn: next })
+      // 서버가 받은 필드만 부분 반영/브로드캐스트하므로, 현재 알고 있는 두 상태를
+      // 항상 같이 보내 다른 참가자 화면에서 카메라 상태가 유실되지 않도록 한다.
+      socketRef.current?.sendStatusUpdate({ isMicOn: next, isCameraOn: cameraOn })
       if (meRef.current) upsertParticipant(meRef.current.id, { micOn: next })
       return next
     })
-  }, [upsertParticipant])
+  }, [cameraOn, upsertParticipant])
 
   const toggleCamera = useCallback(() => {
     setCameraOn((prev) => {
@@ -435,11 +440,11 @@ export function useMeetingRoom(roomCode) {
       cameraTracks.forEach((track) => {
         track.enabled = next
       })
-      socketRef.current?.sendStatusUpdate({ isCameraOn: next })
+      socketRef.current?.sendStatusUpdate({ isMicOn: micOn, isCameraOn: next })
       if (meRef.current) upsertParticipant(meRef.current.id, { cameraOn: next })
       return next
     })
-  }, [upsertParticipant])
+  }, [micOn, upsertParticipant])
 
   const stopScreenShare = useCallback(async () => {
     const cameraTrack = cameraTrackRef.current

@@ -45,6 +45,11 @@
   background-color: #FF9351;
 }
 
+.profile-card__avatar--image {
+  object-fit: cover;
+  background-color: var(--color-surface);
+}
+
 .profile-card__info {
   flex: 1;
   min-width: 0;
@@ -252,6 +257,11 @@
   border-radius: 50%;
   font-size: 18px;
   font-weight: 800;
+}
+
+.mypage-modal__avatar--image {
+  object-fit: cover;
+  background-color: var(--color-surface);
 }
 
 .photo-change-button {

@@ -18,6 +18,7 @@ function MyPage() {
   const [toast, setToast] = useState(null)
 
   const toastTimerRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     let isMounted = true
@@ -65,6 +66,7 @@ function MyPage() {
   }
 
   const closeEditModal = () => {
+    if (draft?.profileImagePreview) URL.revokeObjectURL(draft.profileImagePreview)
     setIsEditOpen(false)
   }
 
@@ -73,9 +75,27 @@ function MyPage() {
   }
 
   const handleChangePhoto = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0]
+    // 같은 파일을 다시 선택해도 change 이벤트가 뜨도록 초기화
+    event.target.value = ''
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      showToast('이미지 파일만 선택할 수 있어요.')
+      return
+    }
+
     setDraft((prev) => {
-      const nextIndex = (AVATAR_COLORS.indexOf(prev.avatarColor) + 1) % AVATAR_COLORS.length
-      return { ...prev, avatarColor: AVATAR_COLORS[nextIndex] }
+      if (prev?.profileImagePreview) URL.revokeObjectURL(prev.profileImagePreview)
+      return {
+        ...prev,
+        profileImageFile: file,
+        profileImagePreview: URL.createObjectURL(file),
+      }
     })
   }
 
@@ -83,17 +103,30 @@ function MyPage() {
     if (!draft.name.trim() || !draft.email.trim()) return
 
     try {
-      const response = await updateMyPage({
-        name: draft.name.trim(),
-        email: draft.email.trim(),
-        position_team: draft.role.trim(),
-      })
+      let payload
+      if (draft.profileImageFile) {
+        payload = new FormData()
+        payload.append('name', draft.name.trim())
+        payload.append('email', draft.email.trim())
+        payload.append('position_team', draft.role.trim())
+        payload.append('profile_image', draft.profileImageFile)
+      } else {
+        payload = {
+          name: draft.name.trim(),
+          email: draft.email.trim(),
+          position_team: draft.role.trim(),
+        }
+      }
+
+      const response = await updateMyPage(payload)
+      if (draft.profileImagePreview) URL.revokeObjectURL(draft.profileImagePreview)
       setProfile((prev) => ({
         ...prev,
         name: response.data.name,
         role: response.data.position_team || '',
         email: response.data.email,
         avatarColor: draft.avatarColor,
+        profileImage: response.data.profile_image ?? prev.profileImage,
       }))
       showToast('내 정보가 수정되었어요 ✅')
       setIsEditOpen(false)
@@ -137,9 +170,13 @@ function MyPage() {
       </header>
 
       <article className="profile-card">
-        <div className="profile-card__avatar" style={{ background: profile.avatarColor }}>
-          {profile.name.charAt(0)}
-        </div>
+        {profile.profileImage ? (
+          <img className="profile-card__avatar profile-card__avatar--image" src={profile.profileImage} alt="" />
+        ) : (
+          <div className="profile-card__avatar" style={{ background: profile.avatarColor }}>
+            {profile.name.charAt(0)}
+          </div>
+        )}
         <div className="profile-card__info">
           <p className="profile-card__name">{profile.name}</p>
           <p className="profile-card__meta">
@@ -196,9 +233,24 @@ function MyPage() {
             <h3 className="mypage-modal__title">내 정보 수정</h3>
 
             <div className="mypage-modal__avatar-row">
-              <div className="mypage-modal__avatar" style={{ background: draft.avatarColor }}>
-                {draft.name.charAt(0) || '?'}
-              </div>
+              {draft.profileImagePreview || draft.profileImage ? (
+                <img
+                  className="mypage-modal__avatar mypage-modal__avatar--image"
+                  src={draft.profileImagePreview || draft.profileImage}
+                  alt=""
+                />
+              ) : (
+                <div className="mypage-modal__avatar" style={{ background: draft.avatarColor }}>
+                  {draft.name.charAt(0) || '?'}
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
               <button className="photo-change-button" type="button" onClick={handleChangePhoto}>
                 사진 변경
               </button>
