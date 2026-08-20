@@ -48,9 +48,8 @@ class MeetingConsumer(AsyncWebsocketConsumer):
         )
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
-async def receive_bytes(self, bytes_data):
+    async def receive_bytes(self, bytes_data):
         print(f"🎤 [STT 요청] {len(bytes_data)} 바이트 수신, 즉시 처리 시작")
-
         original_text = await AIServicePipeline.process_stt(bytes_data)
 
         if original_text:
@@ -129,9 +128,7 @@ async def receive_bytes(self, bytes_data):
                     }
                 )
 
-
     async def chat_broadcast(self, event):
-        """실시간 채팅 브로드캐스트"""
         await self.send(text_data=json.dumps({
             'type': 'chat',
             'sender_id': event['sender_id'],
@@ -163,11 +160,9 @@ async def receive_bytes(self, bytes_data):
         await self.send(text_data=json.dumps(event, default=str))
 
     async def kicked(self, event):
-        """호스트가 강퇴한 참가자에게만 알림을 보내고 연결을 종료한다."""
         if event['user_id'] is not None and str(event['user_id']) == str(self.user.id):
             await self.send(text_data=json.dumps({'type': 'kicked'}))
             await self.close()
-
 
     @database_sync_to_async
     def get_meeting_status(self):
