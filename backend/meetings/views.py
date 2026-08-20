@@ -447,3 +447,51 @@ class HomeMeetingListView(APIView):
 
         serializer = MeetingSessionSerializer(meetings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class InvitationListView(APIView):
+    """
+    [받은 회의 초대 목록 조회 API]
+    종 모양 알림 아이콘을 눌렀을 때 'PENDING(대기 중)' 상태인 초대 목록 반환
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        invitations = MeetingParticipant.objects.filter(user=request.user, status='PENDING')
+        data = []
+        for inv in invitations:
+            data.append({
+                "meeting_id": inv.meeting.id,
+                "room_code": inv.meeting.room_code,
+                "title": inv.meeting.title,
+                "host_name": inv.meeting.host.username if inv.meeting.host else "호스트",
+                "created_at": inv.meeting.created_at,
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class RespondInvitationView(APIView):
+    """
+    [회의 초대 수락 / 거절 처리 API]
+    POST 요청으로 {"action": "accept"} 또는 {"action": "reject"} 전달
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, meeting_id):
+        action = request.data.get('action')
+
+        participant = get_object_or_404(MeetingParticipant, meeting_id=meeting_id, user=request.user)
+
+        if action == 'accept':
+            participant.status = 'ACCEPTED'
+            participant.is_active = True
+            participant.save(update_fields=['status', 'is_active'])
+            return Response({'message': '회의 참가가 수락되었습니다.'}, status=status.HTTP_200_OK)
+
+        elif action == 'reject':
+            participant.status = 'REJECTED'
+            participant.is_active = False
+            participant.save(update_fields=['status', 'is_active'])
+            return Response({'message': '회의 로그가 거절되었습니다.'}, status=status.HTTP_200_OK)
+
+        else:
+            return Response({'error': '올바르지 않은 요청입니다. (action: accept/reject 필요)'}, status=status.HTTP_400_BAD_REQUEST)
