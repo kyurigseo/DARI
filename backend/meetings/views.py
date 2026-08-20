@@ -29,6 +29,15 @@ from .serializers import (
 )
 
 User = get_user_model()
+def resolve_meeting(room_code):
+    """
+    실제 room_code 또는 프론트 목데이터 room_code를
+    실제 MeetingSession으로 변환한다.
+    """
+    if room_code.startswith("00000000") or room_code.startswith("demo-"):
+        return MeetingSession.objects.order_by('-created_at').first()
+
+    return MeetingSession.objects.filter(room_code=room_code).first()
 
 class CreateMeetingView(APIView):
     permission_classes = [IsAuthenticated]
@@ -58,13 +67,7 @@ class PrejoinView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, room_code):
-        # 💡 목 데이터 코드가 들어오거나 DB에 없을 경우 가장 최근 회의를 안전하게 연결
-        if room_code.startswith("00000000") or room_code.startswith("demo-"):
-            meeting = MeetingSession.objects.all().order_by('-created_at').first()
-        else:
-            meeting = MeetingSession.objects.filter(room_code=room_code).first()
-            if not meeting:
-                meeting = MeetingSession.objects.all().order_by('-created_at').first()
+        meeting = resolve_meeting(room_code)
 
         if not meeting:
             return Response({'error': '생성된 회의가 없습니다. 먼저 회의를 만들어주세요.'}, status=status.HTTP_404_NOT_FOUND)
@@ -117,12 +120,20 @@ class MediaTokenView(APIView):
         return self._issue_token(request, room_code)
 
     def _issue_token(self, request, room_code):
-        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        meeting = resolve_meeting(room_code)
+
+        if not meeting:
+            return Response(
+                {'error': '회의를 찾을 수 없습니다.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         token = generate_media_server_token(
             room_code=meeting.room_code,
             user_id=request.user.id,
             username=request.user.username
         )
+
         return Response({'token': token})
 
 
