@@ -1,0 +1,602 @@
+.summary-page {
+  color: var(--color-ink);
+}
+
+.summary-page__heading {
+  margin-bottom: 20px;
+}
+
+.summary-page__heading h1 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.summary-page__heading p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 탭 */
+.meeting-tabs {
+  margin-bottom: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meeting-tab {
+  min-height: 36px;
+  padding: 9px 16px;
+  color: #444a57;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.meeting-tab:hover {
+  color: #8B5CF6;
+  background: #F1ECFC;
+  border-color: var(--color-primary);
+}
+
+.meeting-tab--active {
+  color: #8B5CF6;
+  background: #F1ECFC;
+  border-color: var(--color-primary);
+}
+
+/* 공통 카드 */
+.summary-card,
+.note-card,
+.action-card {
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+/* AI 요약 카드 */
+.summary-card__title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.summary-card__ai-label {
+  margin: 0 0 8px;
+  color: var(--color-primary);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.summary-card__text {
+  margin: 0;
+  color: #303542;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+/* 내 메모 카드 */
+.note-card__title {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.note-card__textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 12px 14px;
+  color: var(--color-ink);
+  background: #fafafc;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.note-card__textarea::placeholder {
+  color: #9297a3;
+}
+
+.note-card__textarea:focus {
+  outline: 0;
+  background: #fff;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgb(132 84 246 / 12%);
+}
+
+.note-card__actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.note-card__save {
+  padding: 9px 18px;
+  color: #8B5CF6;
+  background: #F1ECFC;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.note-card__save:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.note-card__save:active:not(:disabled) {
+  background: #e0e0f8; 
+}
+
+.note-card__save:disabled {
+  background: #F1ECFC;
+  cursor: not-allowed;
+}
+
+.note-card__divider {
+  height: 1px;
+  margin: 18px 0 14px;
+  background: var(--color-border);
+}
+
+.note-card__list-title {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.note-card__empty {
+  margin: 0;
+  color: #9297a3;
+  font-size: 12.5px;
+}
+
+.note-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-item {
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f5f6fa;
+  border-radius: 10px;
+}
+
+.note-item__text {
+  margin: 0 0 6px;
+  color: #303542;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-item__timestamp {
+  color: #9297a3;
+  font-size: 11px;
+}
+
+.note-item__delete {
+  padding: 2px 4px;
+  color: #9297a3;
+  background: none;
+  border: 0;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.note-item__delete:hover {
+  color: var(--color-danger);
+}
+
+/* Action Items 카드 */
+.action-card__title {
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.action-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-item {
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.action-item:first-child {
+  border-top: 0;
+}
+
+.action-item__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.action-item__check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.action-item__box {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #fff;
+  border: 1.5px solid var(--color-border);
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.action-item__check input:checked + .action-item__box {
+  background: #20ad7a;
+  border-color: #20ad7a;
+}
+
+.action-item__check input:focus-visible + .action-item__box {
+  outline: 3px solid rgb(76 95 213 / 25%);
+  outline-offset: 2px;
+}
+
+.action-item__label {
+  color: var(--color-ink);
+  font-size: 13.5px;
+}
+
+.action-item__label--done {
+  color: #9297a3;
+  text-decoration: line-through;
+}
+
+.action-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* -------------- 태그 및 뱃지 버튼 -------------- */
+.action-tag {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;    
+  cursor: pointer;  
+}
+
+/* 담당자 (지정됨) - 회색 바탕, 진한 글씨 */
+.action-tag--assignee {
+  color: #111;
+  background: #f4f5f8; 
+}
+
+/* 기한 (지정됨) - 바탕/테두리 아예 없음 */
+.action-tag--due {
+  color: #555;
+  background: transparent; 
+  padding: 6px 4px; /* 테두리가 없으니 여백을 줄임 */
+}
+
+/* 공통 버튼 리셋 */
+.action-tag-button {
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 담당자 지정 버튼 (미지정) - 회색 바탕 */
+.action-tag-button--assignee {
+  padding: 6px 14px;
+  color: #555;
+  background: #f4f5f8;
+  border: none;
+  border-radius: 20px;
+}
+
+.action-tag-button--assignee:hover {
+  background: #e4e5e8;
+}
+
+/* 기한 지정 버튼 (미지정) - 바탕/테두리 아예 없음 */
+.action-tag-button--due {
+  padding: 6px 4px;
+  color: #9297a3; /* 연한 글씨 */
+  background: transparent;
+  border: none;
+}
+
+.action-tag-button--due:hover {
+  color: #555;
+}
+
+
+/* 공유 버튼 */
+.share-row {
+  display: flex;
+  gap: 12px;
+}
+
+.share-button {
+  padding: 13px 20px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.share-button--outline {
+  flex: 1;
+  color: var(--color-ink);
+  background: #fff;
+  border-color: var(--color-border);
+}
+
+.share-button--outline:hover {
+  color: var(--color-primary);
+  border-color: #b9a2fa;
+}
+
+.share-button--primary {
+  flex: 1; 
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.share-button--primary:hover {
+  background: var(--color-primary-dark);
+}
+
+
+/* -------------- 공통 모달 -------------- */
+.summary-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.summary-modal {
+  max-width: 100%;
+  padding: 24px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 담당자 지정 모달 크기 */
+.summary-modal--assignee {
+  width: 420px;
+  height: 365px;
+}
+
+/* 마감 기한 설정 모달 크기 (412x212) */
+.summary-modal--due {
+  width: 412px;
+  height: 212px;
+}
+
+.summary-modal__title {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #111;
+}
+
+.summary-modal__subtitle {
+  margin: 0 0 10px;
+  color: #555;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* -------------- 담당자 지정 모달 특정 요소 -------------- */
+.member-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px; 
+}
+
+.member-list__button {
+  width: 100%;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  color: #333;
+  background: #fff; 
+  border: 1px solid #e1e3e8; 
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.member-list__button:hover {
+  background: #f4f5f8;
+}
+
+.host-badge {
+  margin-left: 8px; 
+  padding: 3px 8px;
+  color: #8454f6;
+  background: #f4edff;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 공통 입력 줄 (텍스트 인풋 / 날짜 인풋 공용) */
+.summary-modal__input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: auto; /* 박스 제일 아래로 밀어냄 */
+}
+
+.summary-modal__input-row input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: #333;
+}
+
+.summary-modal__input-row input:focus {
+  outline: 0;
+  border-color: #8454f6;
+}
+
+.summary-modal__input-row button {
+  padding: 0 20px;
+  background: #8454f6;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.summary-modal__input-row button:hover {
+  background: #6a3de8;
+}
+
+/* -------------- 기한 지정 모달 특정 요소 -------------- */
+.preset-btn-group-row {
+  display: flex;
+  flex-direction: row; 
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.preset-btn-group-row .preset-btn {
+  flex: 1; 
+  padding: 12px 0;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+  cursor: pointer;
+}
+
+.preset-btn-group-row .preset-btn:hover {
+  background: #f4f5f8;
+}
+
+/* 기한 지정 모달 안에서의 간격 미세 조정 */
+.summary-modal__subtitle--due {
+  margin-top: auto;
+  margin-bottom: 8px;
+}
+
+.summary-modal__input-row--due {
+  margin-top: 0;
+}
+
+/* -------------- 토스트 애니메이션 -------------- */
+.summary-toast {
+  position: fixed;
+  bottom: 26px;
+  left: 50%;
+  z-index: 60;
+  padding: 12px 20px;
+  color: #fff;
+  background: #1b1f2a;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 14px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.summary-toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 640px) {
+  .summary-card,
+  .note-card,
+  .action-card {
+    padding: 18px;
+  }
+
+  .action-item {
+    flex-wrap: wrap;
+  }
+
+  .action-item__meta {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .share-row {
+    flex-direction: column;
+  }
+}
