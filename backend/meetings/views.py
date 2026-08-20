@@ -1,6 +1,7 @@
 # 회의실 생성, 대기실 조회, 토큰 발급 API
 import threading
 import urllib.parse
+import uuid
 from django.db import models
 from django.conf import settings
 from rest_framework import status, generics
@@ -34,18 +35,21 @@ class CreateMeetingView(APIView):
 
     def post(self, request):
         title = request.data.get('title', '신규 회의')
-        room_code = request.data.get('room_code')
 
-        if MeetingSession.objects.filter(room_code=room_code).exists():
-            return Response({'error': '이미 존재하는 회의 코드입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+        room_code = request.data.get('room_code')
+        if not room_code:
+            room_code = str(uuid.uuid4())[:8]
+
+        while MeetingSession.objects.filter(room_code=room_code).exists():
+            room_code = str(uuid.uuid4())[:8]
 
         meeting = MeetingSession.objects.create(
             room_code=room_code,
             title=title,
-            host=request.user
+            host=request.user,
+            status='WAITING'
         )
         return Response(MeetingSessionSerializer(meeting).data, status=status.HTTP_201_CREATED)
-
 
 class PrejoinView(APIView):
     permission_classes = [IsAuthenticated]
