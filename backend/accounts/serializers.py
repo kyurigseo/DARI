@@ -136,3 +136,4 @@ class UserSettingsUpdateSerializer(serializers.ModelSerializer):
             'notification_enabled': {'required': False},
             'preferred_language': {'required': False},
         }
+

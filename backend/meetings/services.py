@@ -6,6 +6,7 @@ import httpx
 import json
 from django.conf import settings
 from .models import MeetingSession, MeetingTranscript, MeetingChatMessage, MeetingSummary, ActionItem, MeetingMemo
+from openai import AsyncOpenAI
 
 # 언어 코드 매핑 테이블
 LANGUAGE_MAPPING = {
@@ -16,35 +17,42 @@ LANGUAGE_MAPPING = {
     'Deutsch': 'DE',
 }
 
+
+
 class AIServicePipeline:
     @staticmethod
     async def process_stt(audio_bytes: bytes) -> str:
-        """
-        [STT 파이프라인] 음성 바이너리 데이터를 OpenAI Whisper API 등으로 전달하여 텍스트 추출
-        """
-        api_key = getattr(settings, 'OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
-        if not api_key or len(audio_bytes) < 1000: # 음성 데이터가 너무 짧으면 패스
-            return ""
+       """
+       [STT 파이프라인] 음성 바이너리 데이터를 OpenAI Whisper API 등으로 전달하여 텍스트 추출
+       """
+       api_key = getattr(settings, 'OPENAI_API_KEY', os.getenv('OPENAI_API_KEY', ''))
 
-        url = "https://api.openai.com/v1/audio/transcriptions"
-        headers = {"Authorization": f"Bearer {api_key}"}
+       # ✨ 수정 1: 프론트에서 온 데이터 크기 확인용 로그 추가, 1000 -> 100으로 제한 완화
+       print(f"🎤 [STT] 수신된 오디오 크기: {len(audio_bytes)} 바이트")
+       if not api_key or len(audio_bytes) < 100:
+           print("⚠️ [STT 무시됨] 키가 없거나 데이터가 너무 짧습니다.")
+           return ""
 
+       url = "https://api.openai.com/v1/audio/transcriptions"
+       headers = {"Authorization": f"Bearer {api_key}"}
 
-        # 브라우저 MediaRecorder는 기본적으로 webm/opus 컨테이너로 청크를 만들어 보낸다.
-        # (wav로 잘못 라벨링하면 Whisper가 디코딩에 실패할 수 있다.)
-        audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
-        files = {"file": audio_file}
-        data = {"model": "whisper-1"}
+       # 브라우저 MediaRecorder는 기본적으로 webm/opus 컨테이너로 청크를 만들어 보낸다.
+       audio_file = ("audio.webm", io.BytesIO(audio_bytes), "audio/webm")
+       files = {"file": audio_file}
+       data = {"model": "whisper-1"}
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, headers=headers, files=files, data=data)
-                if response.status_code == 200:
-                    return response.json().get("text", "").strip()
-        except Exception as e:
-            print(f"[STT 오류] {e}")
+       try:
+           async with httpx.AsyncClient(timeout=10.0) as client:
+               response = await client.post(url, headers=headers, files=files, data=data)
+               if response.status_code == 200:
+                   return response.json().get("text", "").strip()
+               else:
+                   # ✨ 수정 2: OpenAI가 거절했을 때 정확한 이유를 알기 위해 로그 추가
+                   print(f"❌ [STT 실패] 상태코드: {response.status_code}, 상세: {response.text}")
+       except Exception as e:
+           print(f"[STT 오류] {e}")
 
-        return ""
+       return ""
 
     @staticmethod
     async def process_translation(text: str, target_langs: list) -> dict:
