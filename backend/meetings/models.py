@@ -17,6 +17,7 @@ class MeetingSession(models.Model):
     host = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='hosted_meetings')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='WAITING')
     created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
@@ -41,7 +42,8 @@ class MeetingParticipant(models.Model):
     is_speaking = models.BooleanField(default=False)
     local_time_zone = models.CharField(max_length=50, default='UTC')
 
-    joined_at = models.DateTimeField(auto_now_add=True)
+    joined_at = models.DateTimeField(null=True, blank=True)
+    left_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=False)
 
     class Meta:

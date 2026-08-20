@@ -18,6 +18,7 @@ from asgiref.sync import async_to_sync
 from .models import MeetingSession, MeetingParticipant, SpeechCard, MeetingChatMessage, MeetingSummary, MeetingMemo, ActionItem
 from .utils import generate_media_server_token
 from .services import MeetingSummaryPipeline, MeetingShareFormatter
+from . import tracker_client
 from .serializers import (
     MeetingSessionSerializer,
     ParticipantSerializer,
@@ -339,32 +340,146 @@ class KickParticipantView(APIView):
 class EndMeetingView(APIView):
     """
     [회의 종료 API]
-    호스트 권한으로 회의를 종료하고, 백그라운드에서 AI 요약 & Action Item 파이프라인을 실행
+
+    호스트 권한으로 회의를 종료하고,
+    회의 참가자별 참여 기록을 tracker로 전달한 뒤
+    백그라운드에서 AI 요약 & Action Item 파이프라인을 실행한다.
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, room_code):
-        meeting = get_object_or_404(MeetingSession, room_code=room_code)
+        meeting = get_object_or_404(
+            MeetingSession,
+            room_code=room_code
+        )
 
         if meeting.host != request.user:
-            return Response({'error': '회의를 종료할 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': '회의를 종료할 권한이 없습니다.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-        meeting.status = 'ENDED'
+        if meeting.status == 'ENDED':
+            return Response(
+                {
+                    'message': '이미 종료된 회의입니다.',
+                    'room_code': meeting.room_code,
+                    'status': meeting.status
+                },
+                status=status.HTTP_200_OK
+            )
+
+        # --------------------------------------------------
+        # 1. 회의 종료 시각 기록
+        # --------------------------------------------------
         meeting.ended_at = timezone.now()
-        meeting.save(update_fields=['status', 'ended_at'])
+        meeting.status = 'ENDED'
+
+        meeting.save(
+            update_fields=[
+                'status',
+                'ended_at',
+            ]
+        )
+
+        # --------------------------------------------------
+        # 2. 아직 회의에 접속 중인 참가자는
+        #    회의 종료 시각을 퇴장 시각으로 기록
+        # --------------------------------------------------
+        participants = (
+            meeting.participants
+            .select_related('user')
+            .all()
+        )
+
+        for participant in participants:
+            if participant.is_active and participant.left_at is None:
+                participant.left_at = meeting.ended_at
+                participant.is_active = False
+
+                participant.save(
+                    update_fields=[
+                        'left_at',
+                        'is_active',
+                    ]
+                )
+
+        # --------------------------------------------------
+        # 3. tracker로 전달할 참가자 데이터 생성
+        # --------------------------------------------------
+        tracker_participants = []
+
+        for participant in participants:
+            speaking_duration_seconds = 0
+
+            if participant.joined_at and participant.left_at:
+                speaking_duration_seconds = max(
+                    0,
+                    int(
+                        (
+                            participant.left_at
+                            - participant.joined_at
+                        ).total_seconds()
+                    )
+                )
+
+            tracker_participants.append(
+                {
+                    'user_id': str(participant.user_id),
+                    'local_timezone': (
+                        participant.local_time_zone or 'UTC'
+                    ),
+                    'local_region': '',
+                    'speaking_duration_seconds': (
+                        speaking_duration_seconds
+                    ),
+                }
+            )
+
+        # --------------------------------------------------
+        # 4. tracker에 참여 기록 전송
+        # --------------------------------------------------
+        try:
+            tracker_result = tracker_client.ingest_participation(
+                request,
+                external_meeting_id=meeting.room_code,
+                meeting_title=meeting.title,
+                meeting_time_utc=meeting.ended_at,
+                participants=tracker_participants,
+            )
+
+        except tracker_client.TrackerUnavailable as exc:
+            print(f"🔥 tracker 참여 기록 전송 실패: {exc}")
+
+            tracker_result = {
+                'error': str(exc)
+            }
+
+        # --------------------------------------------------
+        # 5. AI 회의 요약 및 Action Item 생성
+        # --------------------------------------------------
         if settings.DARI_DEMO_MODE:
-            MeetingSummaryPipeline.generate_summary_and_action_items(meeting.id)
+            MeetingSummaryPipeline.generate_summary_and_action_items(
+                meeting.id
+            )
         else:
             threading.Thread(
                 target=MeetingSummaryPipeline.generate_summary_and_action_items,
                 args=(meeting.id,)
             ).start()
 
-        return Response({
-            'message': '회의가 성공적으로 종료되었으며, AI 요약 생성이 시작되었습니다.',
-            'room_code': meeting.room_code,
-            'status': meeting.status
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                'message': (
+                    '회의가 성공적으로 종료되었으며, '
+                    'AI 요약 생성이 시작되었습니다.'
+                ),
+                'room_code': meeting.room_code,
+                'status': meeting.status,
+                'tracker': tracker_result,
+            },
+            status=status.HTTP_200_OK
+        )
 
 class UserMeetingListView(APIView):
     """
