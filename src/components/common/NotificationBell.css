@@ -1,0 +1,256 @@
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell__button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: #1f2430;
+  background: #f4f5f9;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.notification-bell__badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--color-danger);
+  border: 2px solid var(--color-surface);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.notification-bell__dropdown {
+  width: min(340px, calc(100vw - 32px));
+  max-height: 420px;
+  padding: 16px;
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  overflow: hidden auto;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgb(15 18 29 / 18%);
+}
+
+.notification-bell__dropdown::before {
+  content: '';
+  width: 100%;
+  height: 3px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: linear-gradient(90deg, #8554f6 0%, #6575e9 48%, #12b8a6 100%);
+}
+
+.notification-bell__dropdown-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.notification-bell__empty {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--color-muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.notification-bell__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.notification-bell__item {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.notification-bell__avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--color-accent);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.notification-bell__item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-bell__item-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-bell__item-meta {
+  margin: 3px 0 0;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.notification-bell__confirm-button {
+  padding: 8px 12px;
+  flex: 0 0 auto;
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notification-bell__confirm-button:hover {
+  background: var(--color-primary-dark);
+}
+
+.invite-confirm-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(19 23 34 / 56%);
+}
+
+.invite-confirm-card {
+  width: min(100%, 360px);
+  padding: 32px 26px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--color-ink);
+  text-align: center;
+  background: var(--color-surface);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgb(15 18 29 / 24%);
+}
+
+.invite-confirm-card__label {
+  margin: 0 0 18px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.invite-confirm-card__avatar {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 16px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--color-accent);
+  border-radius: 50%;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.invite-confirm-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.invite-confirm-card__message {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.invite-confirm-card__error {
+  margin: 14px 0 0;
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.invite-confirm-card__actions {
+  width: 100%;
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.invite-confirm-card__actions button {
+  min-height: 46px;
+  border-radius: 11px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.invite-confirm-card__reject {
+  color: var(--color-ink);
+  background: #f4f5f9;
+  border: 1px solid var(--color-border);
+}
+
+.invite-confirm-card__reject:hover:not(:disabled) {
+  background: #ebedf3;
+}
+
+.invite-confirm-card__accept {
+  color: #fff;
+  background: var(--color-primary);
+  border: 0;
+}
+
+.invite-confirm-card__accept:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.invite-confirm-card__actions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 640px) {
+  .notification-bell__dropdown {
+    right: -12px;
+  }
+}
